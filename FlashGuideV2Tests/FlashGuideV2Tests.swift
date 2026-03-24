@@ -1,16 +1,14 @@
-//
-//  FlashGuideV2Tests.swift
-//  FlashGuideV2Tests
-//
-//  Created by Igor Jovanić on 24. 3. 2026..
-//
-
 import Testing
+@testable import FlashGuideV2
 
 struct FlashGuideV2Tests {
+    @Test func recommendationServiceReturnsStarterValues() async throws {
+        let service = RecommendationService()
+        let output = service.makeRecommendation(for: .empty)
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+        #expect(output.shutterSpeedDescription.isEmpty == false)
+        #expect(output.apertureDescription.isEmpty == false)
+        #expect(output.isoDescription.isEmpty == false)
+        #expect(output.flashPowerDescription.isEmpty == false)
     }
-
 }
