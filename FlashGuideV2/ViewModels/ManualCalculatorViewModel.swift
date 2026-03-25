@@ -19,21 +19,24 @@ final class ManualCalculatorViewModel: ObservableObject {
     @Published var recommendation: ExposureRecommendation?
     @Published private(set) var sceneInput: SceneInput
     private let recommendationService: RecommendationServicing
+    private let settingsService: SettingsServicing
 
     init(
         recommendationService: RecommendationServicing = RecommendationService(),
+        settingsService: SettingsServicing = SettingsService(),
         availableCameraBodies: [CameraBody] = CameraBody.mockData,
         availableLenses: [Lens] = Lens.mockData,
         availableFlashUnits: [FlashUnit] = FlashUnit.mockData
     ) {
         self.recommendationService = recommendationService
+        self.settingsService = settingsService
         self.availableCameraBodies = availableCameraBodies
         self.availableLenses = availableLenses
         self.availableFlashUnits = availableFlashUnits
 
-        let defaultCameraBody = availableCameraBodies.first ?? .preview
-        let defaultLens = availableLenses.first ?? .preview
-        let defaultFlashUnit = availableFlashUnits.first ?? .preview
+        let defaultCameraBody = availableCameraBodies.first(where: { $0.id == settingsService.defaultCameraBodyID }) ?? availableCameraBodies.first ?? .preview
+        let defaultLens = availableLenses.first(where: { $0.id == settingsService.defaultLensID }) ?? availableLenses.first ?? .preview
+        let defaultFlashUnit = availableFlashUnits.first(where: { $0.id == settingsService.defaultFlashUnitID }) ?? availableFlashUnits.first ?? .preview
 
         self.selectedCameraBodyID = defaultCameraBody.id
         self.selectedLensID = defaultLens.id
@@ -105,6 +108,37 @@ final class ManualCalculatorViewModel: ObservableObject {
 
     var parsedSubjectDistance: Double? {
         parseDecimal(subjectDistanceText)
+    }
+
+    func updateAvailableGear(
+        cameraBodies: [CameraBody],
+        lenses: [Lens],
+        flashUnits: [FlashUnit]
+    ) {
+        availableCameraBodies = cameraBodies
+        availableLenses = lenses
+        availableFlashUnits = flashUnits
+
+        if let defaultCameraBody = cameraBodies.first(where: { $0.id == settingsService.defaultCameraBodyID }) {
+            selectedCameraBodyID = defaultCameraBody.id
+        } else if cameraBodies.contains(where: { $0.id == selectedCameraBodyID }) == false,
+                  let firstCameraBody = cameraBodies.first {
+            selectedCameraBodyID = firstCameraBody.id
+        }
+
+        if let defaultLens = lenses.first(where: { $0.id == settingsService.defaultLensID }) {
+            selectedLensID = defaultLens.id
+        } else if lenses.contains(where: { $0.id == selectedLensID }) == false,
+                  let firstLens = lenses.first {
+            selectedLensID = firstLens.id
+        }
+
+        if let defaultFlashUnit = flashUnits.first(where: { $0.id == settingsService.defaultFlashUnitID }) {
+            selectedFlashUnitID = defaultFlashUnit.id
+        } else if flashUnits.contains(where: { $0.id == selectedFlashUnitID }) == false,
+                  let firstFlashUnit = flashUnits.first {
+            selectedFlashUnitID = firstFlashUnit.id
+        }
     }
 
     func sanitizeSubjectDistance(_ value: String) {

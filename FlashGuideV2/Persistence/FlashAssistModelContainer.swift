@@ -16,7 +16,7 @@ enum FlashAssistModelContainer {
     static func previewContainer() -> ModelContainer {
         let container = makeContainer(isStoredInMemoryOnly: true)
         let repository = GearProfileRepository()
-        repository.seedSampleDataIfNeeded(using: container.mainContext)
+        repository.seedSampleDataIfNeeded(using: container.mainContext, settingsService: SettingsService())
         return container
     }
 

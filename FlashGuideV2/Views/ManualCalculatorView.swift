@@ -3,12 +3,19 @@
 //  FlashGuideV2
 //
 
+import SwiftData
 import SwiftUI
 
 struct ManualCalculatorView: View {
+    @Query(sort: \CameraBody.createdAt) private var cameraBodies: [CameraBody]
+    @Query(sort: \Lens.createdAt) private var lenses: [Lens]
+    @Query(sort: \FlashUnit.createdAt) private var flashUnits: [FlashUnit]
     @StateObject private var viewModel: ManualCalculatorViewModel
 
     init(viewModel: ManualCalculatorViewModel) {
+        _cameraBodies = Query(sort: \CameraBody.createdAt)
+        _lenses = Query(sort: \Lens.createdAt)
+        _flashUnits = Query(sort: \FlashUnit.createdAt)
         _viewModel = StateObject(wrappedValue: viewModel)
     }
 
@@ -120,9 +127,29 @@ struct ManualCalculatorView: View {
             }
         }
         .navigationTitle("Manual Calculator")
+        .onAppear {
+            syncPersistedGear()
+        }
+        .onChange(of: cameraBodies) { _, _ in
+            syncPersistedGear()
+        }
+        .onChange(of: lenses) { _, _ in
+            syncPersistedGear()
+        }
+        .onChange(of: flashUnits) { _, _ in
+            syncPersistedGear()
+        }
     }
 
     private func apertureRangeText(for lens: Lens) -> String {
         "f/\(lens.minAperture.formatted(.number.precision(.fractionLength(1)))) - f/\(lens.maxAperture.formatted(.number.precision(.fractionLength(1))))"
+    }
+
+    private func syncPersistedGear() {
+        viewModel.updateAvailableGear(
+            cameraBodies: cameraBodies.isEmpty ? CameraBody.mockData : cameraBodies,
+            lenses: lenses.isEmpty ? Lens.mockData : lenses,
+            flashUnits: flashUnits.isEmpty ? FlashUnit.mockData : flashUnits
+        )
     }
 }

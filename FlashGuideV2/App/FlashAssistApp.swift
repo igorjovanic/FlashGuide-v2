@@ -8,8 +8,21 @@ import SwiftUI
 
 @main
 struct FlashAssistApp: App {
-    private let dependencies = AppDependencies.live
-    private let modelContainer = FlashAssistModelContainer.makeSharedContainer()
+    private let dependencies: AppDependencies
+    private let modelContainer: ModelContainer
+
+    init() {
+        let dependencies = AppDependencies.live
+        let modelContainer = FlashAssistModelContainer.makeSharedContainer()
+
+        dependencies.gearProfileRepository.seedSampleDataIfNeeded(
+            using: modelContainer.mainContext,
+            settingsService: dependencies.settingsService
+        )
+
+        self.dependencies = dependencies
+        self.modelContainer = modelContainer
+    }
 
     var body: some Scene {
         WindowGroup {

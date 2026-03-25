@@ -9,10 +9,12 @@ struct AppDependencies {
     let recommendationService: RecommendationServicing
     let cameraService: CameraServicing
     let gearProfileRepository: GearProfileRepository
+    let settingsService: SettingsServicing
 
     static let live = AppDependencies(
         recommendationService: RecommendationService(),
         cameraService: CameraService(),
-        gearProfileRepository: GearProfileRepository()
+        gearProfileRepository: GearProfileRepository(),
+        settingsService: SettingsService()
     )
 }

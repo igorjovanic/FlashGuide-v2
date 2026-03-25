@@ -26,7 +26,12 @@ struct HomeView: View {
             .navigationDestination(for: HomeDestination.self) { destination in
                 switch destination {
                 case .manualCalculator:
-                    ManualCalculatorView(viewModel: ManualCalculatorViewModel())
+                    ManualCalculatorView(
+                        viewModel: ManualCalculatorViewModel(
+                            recommendationService: dependencies.recommendationService,
+                            settingsService: dependencies.settingsService
+                        )
+                    )
                 case .liveAssist:
                     LiveAssistView(
                         viewModel: LiveAssistViewModel(
@@ -36,12 +41,13 @@ struct HomeView: View {
                 case .gearProfiles:
                     GearProfilesView(
                         viewModel: GearProfilesViewModel(
-                            repository: dependencies.gearProfileRepository
+                            repository: dependencies.gearProfileRepository,
+                            settingsService: dependencies.settingsService
                         )
                     )
                 case .settings:
                     SettingsView(
-                        viewModel: SettingsViewModel(settingsService: SettingsService())
+                        viewModel: SettingsViewModel(settingsService: dependencies.settingsService)
                     )
                 }
             }
