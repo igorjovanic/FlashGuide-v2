@@ -26,11 +26,7 @@ struct HomeView: View {
             .navigationDestination(for: HomeDestination.self) { destination in
                 switch destination {
                 case .manualCalculator:
-                    ManualCalculatorView(
-                        viewModel: ManualCalculatorViewModel(
-                            recommendationService: dependencies.recommendationService
-                        )
-                    )
+                    ManualCalculatorView(viewModel: ManualCalculatorViewModel())
                 case .liveAssist:
                     LiveAssistView(
                         viewModel: LiveAssistViewModel(
