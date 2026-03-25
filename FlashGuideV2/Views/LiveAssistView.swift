@@ -49,6 +49,73 @@ struct LiveAssistView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
+                    Text("Depth")
+                        .font(.headline)
+
+                    Text(viewModel.depthEstimationState.statusLabel)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(depthStatusColor.opacity(0.16), in: Capsule())
+                        .foregroundStyle(depthStatusColor)
+
+                    if let estimate = viewModel.latestDepthEstimate {
+                        DetailRow(title: "Estimated Distance", value: estimate.value.displayValue)
+                        DetailRow(title: "Sample Count", value: "\(estimate.sampledPixelCount)")
+
+                        if viewModel.canAcceptEstimatedDistance {
+                            Button("Accept Estimated Distance") {
+                                viewModel.acceptEstimatedDistance()
+                            }
+                            .buttonStyle(.borderedProminent)
+                        } else {
+                            Text("This estimate is relative only. Enter a manual distance to use it in recommendations.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if viewModel.depthEstimationState == .estimating {
+                        Text("Sampling depth around the selected subject point.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else if viewModel.depthEstimationState == .unavailable {
+                        Text("Depth isn’t available on this device or for the current capture configuration. Enter a manual distance instead.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Tap the subject to estimate distance from the latest depth frame.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Manual Distance Override")
+                            .font(.subheadline.weight(.medium))
+
+                        TextField("Distance in meters", text: $viewModel.manualDistanceText)
+                            .keyboardType(.decimalPad)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .onSubmit {
+                                viewModel.applyManualDistanceOverride()
+                            }
+
+                        Button("Apply Manual Distance") {
+                            viewModel.applyManualDistanceOverride()
+                        }
+                        .buttonStyle(.bordered)
+
+                        if let distanceInputError = viewModel.distanceInputError {
+                            Text(distanceInputError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Pipeline Readiness")
                         .font(.headline)
                     DetailRow(
@@ -104,6 +171,14 @@ struct LiveAssistView: View {
                     DetailRow(
                         title: "Subject Distance",
                         value: "\(viewModel.sceneInput.subjectDistanceMeters.formatted(.number.precision(.fractionLength(1)))) m"
+                    )
+                    DetailRow(
+                        title: "Manual Override",
+                        value: viewModel.sceneInput.manualDistanceOverride.map { "\($0.formatted(.number.precision(.fractionLength(2)))) m" } ?? "None"
+                    )
+                    DetailRow(
+                        title: "Accepted Depth Estimate",
+                        value: viewModel.sceneInput.depthEstimate.map { "\($0.formatted(.number.precision(.fractionLength(2)))) m" } ?? "None"
                     )
                 }
             }
@@ -188,6 +263,17 @@ struct LiveAssistView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(24)
+    }
+
+    private var depthStatusColor: Color {
+        switch viewModel.depthEstimationState {
+        case .available:
+            .green
+        case .unavailable:
+            .orange
+        case .estimating:
+            .blue
+        }
     }
 }
 

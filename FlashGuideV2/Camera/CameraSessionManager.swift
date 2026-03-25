@@ -4,6 +4,7 @@
 //
 
 import AVFoundation
+import CoreMedia
 import CoreGraphics
 import Foundation
 
@@ -61,9 +62,12 @@ protocol CameraServicing: AnyObject {
     var session: AVCaptureSession { get }
     var authorizationState: CameraAuthorizationState { get }
     var depthSupportState: DepthSupportState { get }
+    var depthEstimationState: CameraDepthEstimationState { get }
+    var latestDepthEstimate: CameraDepthEstimate? { get }
     var isSessionRunning: Bool { get }
     var framePipelineState: CameraFramePipelineState { get }
     var subjectSelectionSupport: CameraSubjectSelectionSupport { get }
+    var onStateChange: ((CameraStateSnapshot) -> Void)? { get set }
 
     func requestAccessIfNeeded() async -> CameraAuthorizationState
     func startSession()
@@ -71,7 +75,7 @@ protocol CameraServicing: AnyObject {
     func selectSubject(at point: CGPoint)
 }
 
-final class CameraSessionManager: NSObject, CameraServicing {
+final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataOutputDelegate {
     private let sessionQueue = DispatchQueue(label: "flashassist.camera.session", qos: .userInitiated)
     private let videoOutput = AVCaptureVideoDataOutput()
     private let depthOutput = AVCaptureDepthDataOutput()
@@ -79,12 +83,17 @@ final class CameraSessionManager: NSObject, CameraServicing {
     private(set) var session = AVCaptureSession()
     private(set) var authorizationState: CameraAuthorizationState = .notDetermined
     private(set) var depthSupportState: DepthSupportState = .unknown
+    private(set) var depthEstimationState: CameraDepthEstimationState = .unavailable
+    private(set) var latestDepthEstimate: CameraDepthEstimate?
     private(set) var isSessionRunning = false
     private(set) var framePipelineState = CameraFramePipelineState.inactive
     private(set) var subjectSelectionSupport = CameraSubjectSelectionSupport.unavailable
+    var onStateChange: ((CameraStateSnapshot) -> Void)?
 
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var isConfigured = false
+    private var latestDepthData: AVDepthData?
+    private var pendingDepthSamplePoint: CGPoint?
 
     override init() {
         super.init()
@@ -105,6 +114,8 @@ final class CameraSessionManager: NSObject, CameraServicing {
             refreshHardwareCapabilities()
         }
 
+        publishState()
+
         return authorizationState
     }
 
@@ -122,7 +133,7 @@ final class CameraSessionManager: NSObject, CameraServicing {
 
             guard self.isConfigured, !self.session.isRunning else { return }
             self.session.startRunning()
-            DispatchQueue.main.async {
+            self.updateStateOnMain {
                 self.isSessionRunning = self.session.isRunning
             }
         }
@@ -133,7 +144,7 @@ final class CameraSessionManager: NSObject, CameraServicing {
             guard let self else { return }
             guard self.session.isRunning else { return }
             self.session.stopRunning()
-            DispatchQueue.main.async {
+            self.updateStateOnMain {
                 self.isSessionRunning = false
             }
         }
@@ -142,26 +153,41 @@ final class CameraSessionManager: NSObject, CameraServicing {
     func selectSubject(at point: CGPoint) {
         sessionQueue.async { [weak self] in
             guard let self, let device = self.videoDeviceInput?.device else { return }
-            guard device.isFocusPointOfInterestSupported || device.isExposurePointOfInterestSupported else { return }
 
             do {
-                try device.lockForConfiguration()
-                if device.isFocusPointOfInterestSupported {
-                    device.focusPointOfInterest = point
-                    if device.isFocusModeSupported(.continuousAutoFocus) {
-                        device.focusMode = .continuousAutoFocus
+                if device.isFocusPointOfInterestSupported || device.isExposurePointOfInterestSupported {
+                    try device.lockForConfiguration()
+                    if device.isFocusPointOfInterestSupported {
+                        device.focusPointOfInterest = point
+                        if device.isFocusModeSupported(.continuousAutoFocus) {
+                            device.focusMode = .continuousAutoFocus
+                        }
                     }
-                }
-                if device.isExposurePointOfInterestSupported {
-                    device.exposurePointOfInterest = point
-                    if device.isExposureModeSupported(.continuousAutoExposure) {
-                        device.exposureMode = .continuousAutoExposure
+                    if device.isExposurePointOfInterestSupported {
+                        device.exposurePointOfInterest = point
+                        if device.isExposureModeSupported(.continuousAutoExposure) {
+                            device.exposureMode = .continuousAutoExposure
+                        }
                     }
+                    device.unlockForConfiguration()
                 }
-                device.unlockForConfiguration()
             } catch {
                 return
             }
+
+            guard self.depthSupportState == .supported else {
+                self.updateStateOnMain {
+                    self.depthEstimationState = .unavailable
+                    self.latestDepthEstimate = nil
+                }
+                return
+            }
+
+            self.pendingDepthSamplePoint = point
+            self.updateStateOnMain {
+                self.depthEstimationState = .estimating
+            }
+            self.resolvePendingDepthEstimateIfPossible()
         }
     }
 
@@ -174,8 +200,10 @@ final class CameraSessionManager: NSObject, CameraServicing {
 
         do {
             guard let device = bestRearCamera() else {
-                DispatchQueue.main.async {
+                updateStateOnMain {
                     self.depthSupportState = .unsupported
+                    self.depthEstimationState = .unavailable
+                    self.latestDepthEstimate = nil
                     self.subjectSelectionSupport = .unavailable
                 }
                 return
@@ -207,6 +235,8 @@ final class CameraSessionManager: NSObject, CameraServicing {
             if !device.activeFormat.supportedDepthDataFormats.isEmpty, session.canAddOutput(depthOutput) {
                 session.addOutput(depthOutput)
                 depthOutput.isFilteringEnabled = true
+                depthOutput.alwaysDiscardsLateDepthData = true
+                depthOutput.setDelegate(self, callbackQueue: sessionQueue)
                 nextDepthSupportState = .supported
                 nextPipelineState.isDepthPipelinePrepared = true
             } else if device.activeFormat.supportedDepthDataFormats.isEmpty {
@@ -217,14 +247,17 @@ final class CameraSessionManager: NSObject, CameraServicing {
 
             isConfigured = true
 
-            DispatchQueue.main.async {
+            updateStateOnMain {
                 self.depthSupportState = nextDepthSupportState
+                self.depthEstimationState = nextDepthSupportState == .supported ? .available : .unavailable
                 self.framePipelineState = nextPipelineState
                 self.subjectSelectionSupport = nextSubjectSelectionSupport
             }
         } catch {
-            DispatchQueue.main.async {
+            updateStateOnMain {
                 self.depthSupportState = .unsupported
+                self.depthEstimationState = .unavailable
+                self.latestDepthEstimate = nil
                 self.framePipelineState = .inactive
                 self.subjectSelectionSupport = .unavailable
             }
@@ -234,6 +267,8 @@ final class CameraSessionManager: NSObject, CameraServicing {
     private func refreshHardwareCapabilities() {
         guard authorizationState.isAuthorized else {
             depthSupportState = .unknown
+            depthEstimationState = .unavailable
+            latestDepthEstimate = nil
             framePipelineState = .inactive
             subjectSelectionSupport = .unavailable
             return
@@ -241,6 +276,8 @@ final class CameraSessionManager: NSObject, CameraServicing {
 
         guard let device = bestRearCamera() else {
             depthSupportState = .unsupported
+            depthEstimationState = .unavailable
+            latestDepthEstimate = nil
             framePipelineState = .inactive
             subjectSelectionSupport = .unavailable
             return
@@ -253,10 +290,13 @@ final class CameraSessionManager: NSObject, CameraServicing {
 
         if !device.activeFormat.supportedDepthDataFormats.isEmpty {
             depthSupportState = .supported
+            depthEstimationState = .available
         } else if device.activeFormat.supportedDepthDataFormats.isEmpty {
             depthSupportState = .unsupported
+            depthEstimationState = .unavailable
         } else {
             depthSupportState = .limited
+            depthEstimationState = .unavailable
         }
 
         framePipelineState = CameraFramePipelineState(
@@ -289,5 +329,52 @@ final class CameraSessionManager: NSObject, CameraServicing {
         @unknown default:
             .restricted
         }
+    }
+
+    func depthDataOutput(
+        _ output: AVCaptureDepthDataOutput,
+        didOutput depthData: AVDepthData,
+        timestamp: CMTime,
+        connection: AVCaptureConnection
+    ) {
+        latestDepthData = depthData
+
+        if pendingDepthSamplePoint != nil {
+            resolvePendingDepthEstimateIfPossible()
+        } else if depthSupportState == .supported, depthEstimationState != .available {
+            updateStateOnMain {
+                self.depthEstimationState = .available
+            }
+        }
+    }
+
+    private func resolvePendingDepthEstimateIfPossible() {
+        guard let point = pendingDepthSamplePoint, let depthData = latestDepthData else { return }
+        guard let estimate = CameraDepthEstimator.estimate(from: depthData, around: point) else { return }
+
+        pendingDepthSamplePoint = nil
+        updateStateOnMain {
+            self.latestDepthEstimate = estimate
+            self.depthEstimationState = .available
+        }
+    }
+
+    private func updateStateOnMain(_ updates: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            updates()
+            self.publishState()
+        }
+    }
+
+    private func publishState() {
+        onStateChange?(CameraStateSnapshot(
+            authorizationState: authorizationState,
+            depthSupportState: depthSupportState,
+            depthEstimationState: depthEstimationState,
+            latestDepthEstimate: latestDepthEstimate,
+            isSessionRunning: isSessionRunning,
+            framePipelineState: framePipelineState,
+            subjectSelectionSupport: subjectSelectionSupport
+        ))
     }
 }
