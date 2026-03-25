@@ -6,7 +6,7 @@
 import CoreGraphics
 import Foundation
 
-struct UserTapSelection: Equatable, Codable {
+struct UserTapSelection: Equatable, Hashable, Codable {
     var normalizedX: Double
     var normalizedY: Double
     var timestamp: Date
@@ -20,4 +20,11 @@ struct UserTapSelection: Equatable, Codable {
         self.normalizedY = normalizedY
         self.timestamp = timestamp
     }
+
+    static let preview = UserTapSelection(normalizedX: 0.42, normalizedY: 0.36)
+
+    static let mockData: [UserTapSelection] = [
+        UserTapSelection(normalizedX: 0.42, normalizedY: 0.36),
+        UserTapSelection(normalizedX: 0.68, normalizedY: 0.54)
+    ]
 }

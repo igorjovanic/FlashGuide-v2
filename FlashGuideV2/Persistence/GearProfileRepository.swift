@@ -14,9 +14,9 @@ struct GearProfileRepository {
             return
         }
 
-        modelContext.insert(CameraBody())
-        modelContext.insert(Lens())
-        modelContext.insert(FlashUnit())
+        CameraBody.mockData.forEach(modelContext.insert)
+        Lens.mockData.forEach(modelContext.insert)
+        FlashUnit.mockData.forEach(modelContext.insert)
 
         try? modelContext.save()
     }

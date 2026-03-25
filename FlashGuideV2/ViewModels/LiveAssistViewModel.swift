@@ -24,6 +24,6 @@ final class LiveAssistViewModel: ObservableObject {
 
     func selectPoint(x: Double, y: Double) {
         tapSelection = UserTapSelection(normalizedX: x, normalizedY: y)
-        sceneInput.selectedPoint = tapSelection?.point
+        sceneInput.selectedTapPoint = tapSelection
     }
 }

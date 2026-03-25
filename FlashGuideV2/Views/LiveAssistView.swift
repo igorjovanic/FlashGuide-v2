@@ -33,6 +33,27 @@ struct LiveAssistView: View {
                     }
                 }
 
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Scene State")
+                        .font(.headline)
+                    DetailRow(
+                        title: "Ambient Preference",
+                        value: viewModel.sceneInput.ambientPreference.displayName
+                    )
+                    DetailRow(
+                        title: "Depth Available",
+                        value: viewModel.sceneInput.isDepthAvailable ? "Yes" : "No"
+                    )
+                    DetailRow(
+                        title: "Selection Locked",
+                        value: viewModel.sceneInput.isSubjectSelectionLocked ? "Yes" : "No"
+                    )
+                    DetailRow(
+                        title: "Subject Distance",
+                        value: "\(viewModel.sceneInput.subjectDistanceMeters.formatted(.number.precision(.fractionLength(1)))) m"
+                    )
+                }
+
                 Button("Simulate Subject Tap") {
                     viewModel.selectPoint(x: 0.5, y: 0.5)
                 }

@@ -29,8 +29,8 @@ struct GearProfilesView: View {
                 } else {
                     ForEach(cameraBodies) { body in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(body.name)
-                            Text("Sync 1/\(body.syncSpeedDenominator) • ISO \(body.isoMin)-\(body.isoMax)")
+                            Text("\(body.brand) \(body.model)")
+                            Text("Sync \(body.flashSyncSpeed) • ISO \(body.minISO)-\(body.maxISO)")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -45,8 +45,8 @@ struct GearProfilesView: View {
                 } else {
                     ForEach(lenses) { lens in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(lens.name)
-                            Text("\(lens.focalLengthDescription) • f/\(lens.apertureMin, format: .number.precision(.fractionLength(1)))-f/\(lens.apertureMax, format: .number.precision(.fractionLength(1)))")
+                            Text("\(lens.brand) \(lens.model)")
+                            Text("\(lens.focalLengthDescription ?? "Prime") • f/\(lens.minAperture, format: .number.precision(.fractionLength(1)))-f/\(lens.maxAperture, format: .number.precision(.fractionLength(1)))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -61,8 +61,8 @@ struct GearProfilesView: View {
                 } else {
                     ForEach(flashUnits) { flashUnit in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(flashUnit.name)
-                            Text("GN \(flashUnit.guideNumber, format: .number.precision(.fractionLength(0))) • \(flashUnit.powerLevels.joined(separator: ", "))")
+                            Text("\(flashUnit.brand) \(flashUnit.model)")
+                            Text("GN \(flashUnit.guideNumber, format: .number.precision(.fractionLength(0))) @ ISO \(flashUnit.guideNumberISOReference) • \(flashUnit.supportedPowerSteps.joined(separator: ", "))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
