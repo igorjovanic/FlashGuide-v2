@@ -43,12 +43,27 @@ struct CameraFramePipelineState: Equatable {
     )
 }
 
+struct CameraSubjectSelectionSupport: Equatable {
+    var supportsFocusPointOfInterest: Bool
+    var supportsExposurePointOfInterest: Bool
+
+    var supportsAnyPointOfInterest: Bool {
+        supportsFocusPointOfInterest || supportsExposurePointOfInterest
+    }
+
+    static let unavailable = CameraSubjectSelectionSupport(
+        supportsFocusPointOfInterest: false,
+        supportsExposurePointOfInterest: false
+    )
+}
+
 protocol CameraServicing: AnyObject {
     var session: AVCaptureSession { get }
     var authorizationState: CameraAuthorizationState { get }
     var depthSupportState: DepthSupportState { get }
     var isSessionRunning: Bool { get }
     var framePipelineState: CameraFramePipelineState { get }
+    var subjectSelectionSupport: CameraSubjectSelectionSupport { get }
 
     func requestAccessIfNeeded() async -> CameraAuthorizationState
     func startSession()
@@ -66,6 +81,7 @@ final class CameraSessionManager: NSObject, CameraServicing {
     private(set) var depthSupportState: DepthSupportState = .unknown
     private(set) var isSessionRunning = false
     private(set) var framePipelineState = CameraFramePipelineState.inactive
+    private(set) var subjectSelectionSupport = CameraSubjectSelectionSupport.unavailable
 
     private var videoDeviceInput: AVCaptureDeviceInput?
     private var isConfigured = false
@@ -160,6 +176,7 @@ final class CameraSessionManager: NSObject, CameraServicing {
             guard let device = bestRearCamera() else {
                 DispatchQueue.main.async {
                     self.depthSupportState = .unsupported
+                    self.subjectSelectionSupport = .unavailable
                 }
                 return
             }
@@ -177,6 +194,10 @@ final class CameraSessionManager: NSObject, CameraServicing {
             session.addOutput(videoOutput)
 
             var nextDepthSupportState: DepthSupportState = .unsupported
+            let nextSubjectSelectionSupport = CameraSubjectSelectionSupport(
+                supportsFocusPointOfInterest: device.isFocusPointOfInterestSupported,
+                supportsExposurePointOfInterest: device.isExposurePointOfInterestSupported
+            )
             var nextPipelineState = CameraFramePipelineState(
                 isVideoPipelinePrepared: true,
                 isDepthPipelinePrepared: false,
@@ -199,11 +220,13 @@ final class CameraSessionManager: NSObject, CameraServicing {
             DispatchQueue.main.async {
                 self.depthSupportState = nextDepthSupportState
                 self.framePipelineState = nextPipelineState
+                self.subjectSelectionSupport = nextSubjectSelectionSupport
             }
         } catch {
             DispatchQueue.main.async {
                 self.depthSupportState = .unsupported
                 self.framePipelineState = .inactive
+                self.subjectSelectionSupport = .unavailable
             }
         }
     }
@@ -212,14 +235,21 @@ final class CameraSessionManager: NSObject, CameraServicing {
         guard authorizationState.isAuthorized else {
             depthSupportState = .unknown
             framePipelineState = .inactive
+            subjectSelectionSupport = .unavailable
             return
         }
 
         guard let device = bestRearCamera() else {
             depthSupportState = .unsupported
             framePipelineState = .inactive
+            subjectSelectionSupport = .unavailable
             return
         }
+
+        subjectSelectionSupport = CameraSubjectSelectionSupport(
+            supportsFocusPointOfInterest: device.isFocusPointOfInterestSupported,
+            supportsExposurePointOfInterest: device.isExposurePointOfInterestSupported
+        )
 
         if !device.activeFormat.supportedDepthDataFormats.isEmpty {
             depthSupportState = .supported

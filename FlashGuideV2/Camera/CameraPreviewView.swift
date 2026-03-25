@@ -7,9 +7,14 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
+struct CameraPreviewTapResult {
+    let normalizedPreviewPoint: CGPoint
+    let normalizedCameraPoint: CGPoint
+}
+
 struct CameraPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
-    let onTap: (CGPoint) -> Void
+    let onTap: (CameraPreviewTapResult) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(onTap: onTap)
@@ -32,21 +37,52 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject {
-        var onTap: (CGPoint) -> Void
+        var onTap: (CameraPreviewTapResult) -> Void
 
-        init(onTap: @escaping (CGPoint) -> Void) {
+        init(onTap: @escaping (CameraPreviewTapResult) -> Void) {
             self.onTap = onTap
         }
 
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
             guard let view = recognizer.view as? PreviewContainerView else { return }
             let location = recognizer.location(in: view)
-            let normalizedPoint = CGPoint(
-                x: max(0, min(1, location.x / max(view.bounds.width, 1))),
-                y: max(0, min(1, location.y / max(view.bounds.height, 1)))
+            let tapResult = CameraPreviewCoordinateConverter.convertTap(
+                at: location,
+                in: view.bounds,
+                using: view.previewLayer
             )
-            onTap(normalizedPoint)
+            onTap(tapResult)
         }
+    }
+}
+
+enum CameraPreviewCoordinateConverter {
+    // AVCapture uses normalized device coordinates that are not the same as raw
+    // SwiftUI view coordinates once aspect-fill cropping is applied. Keep this
+    // conversion isolated so preview UI can use preview-space points while camera
+    // controls and recommendation input use device-space normalized points.
+    static func convertTap(
+        at location: CGPoint,
+        in bounds: CGRect,
+        using previewLayer: AVCaptureVideoPreviewLayer
+    ) -> CameraPreviewTapResult {
+        let normalizedPreviewPoint = CGPoint(
+            x: clamp(location.x / max(bounds.width, 1)),
+            y: clamp(location.y / max(bounds.height, 1))
+        )
+        let normalizedCameraPoint = previewLayer.captureDevicePointConverted(fromLayerPoint: location)
+
+        return CameraPreviewTapResult(
+            normalizedPreviewPoint: normalizedPreviewPoint,
+            normalizedCameraPoint: CGPoint(
+                x: clamp(normalizedCameraPoint.x),
+                y: clamp(normalizedCameraPoint.y)
+            )
+        )
+    }
+
+    private static func clamp(_ value: CGFloat) -> CGFloat {
+        min(max(value, 0), 1)
     }
 }
 

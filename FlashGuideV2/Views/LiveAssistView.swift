@@ -23,14 +23,28 @@ struct LiveAssistView: View {
                     DetailRow(title: "Permission", value: viewModel.authorizationState.displayName)
                     DetailRow(title: "Session Running", value: viewModel.isSessionRunning ? "Yes" : "No")
                     DetailRow(title: "Depth Support", value: viewModel.depthSupportState.displayName)
+                    DetailRow(
+                        title: "Focus Point Support",
+                        value: viewModel.subjectSelectionSupport.supportsFocusPointOfInterest ? "Yes" : "No"
+                    )
+                    DetailRow(
+                        title: "Exposure Point Support",
+                        value: viewModel.subjectSelectionSupport.supportsExposurePointOfInterest ? "Yes" : "No"
+                    )
 
                     if let tapSelection = viewModel.tapSelection {
                         Text("Selected Point: \(tapSelection.normalizedX, format: .number.precision(.fractionLength(2))), \(tapSelection.normalizedY, format: .number.precision(.fractionLength(2)))")
                             .font(.subheadline)
                     } else {
                         Text("Tap the preview to choose a subject point.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if !viewModel.subjectSelectionSupport.supportsAnyPointOfInterest {
+                        Text("This device does not support focus or exposure points of interest. The selected point will still feed the recommendation pipeline.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -49,6 +63,27 @@ struct LiveAssistView: View {
                         title: "Tap Selection",
                         value: viewModel.framePipelineState.supportsTapSelection ? "Prepared" : "Pending"
                     )
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Subject Selection")
+                        .font(.headline)
+
+                    Button(viewModel.sceneInput.isSubjectSelectionLocked ? "Unlock Subject Selection" : "Lock Subject Selection") {
+                        viewModel.toggleSubjectSelectionLock()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.tapSelection == nil)
+
+                    if viewModel.sceneInput.isSubjectSelectionLocked {
+                        Text("Selection is locked. Unlock to pick a new subject point.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Tap anywhere on the preview to update focus, exposure, and the recommendation input point.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -110,19 +145,19 @@ struct LiveAssistView: View {
     private var previewContent: some View {
         switch viewModel.authorizationState {
         case .authorized:
-            CameraPreviewView(session: viewModel.session) { point in
-                viewModel.selectPoint(x: point.x, y: point.y)
+            CameraPreviewView(session: viewModel.session) { tapResult in
+                viewModel.selectPoint(
+                    previewPoint: tapResult.normalizedPreviewPoint,
+                    cameraPoint: tapResult.normalizedCameraPoint
+                )
             }
             .overlay(alignment: .center) {
                 GeometryReader { geometry in
-                    if let tapSelection = viewModel.tapSelection {
-                        Circle()
-                            .strokeBorder(Color.white, lineWidth: 2)
-                            .background(Circle().fill(Color.white.opacity(0.15)))
-                            .frame(width: 36, height: 36)
+                    if let markerPoint = viewModel.previewMarkerPoint {
+                        FocusMarkerView(isLocked: viewModel.sceneInput.isSubjectSelectionLocked)
                             .position(
-                                x: tapSelection.normalizedX * geometry.size.width,
-                                y: tapSelection.normalizedY * geometry.size.height
+                                x: markerPoint.x * geometry.size.width,
+                                y: markerPoint.y * geometry.size.height
                             )
                     }
                 }
@@ -153,5 +188,24 @@ struct LiveAssistView: View {
                 .multilineTextAlignment(.center)
         }
         .padding(24)
+    }
+}
+
+private struct FocusMarkerView: View {
+    let isLocked: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(isLocked ? Color.yellow : Color.white, lineWidth: 2)
+                .frame(width: 44, height: 44)
+            Rectangle()
+                .fill(isLocked ? Color.yellow : Color.white)
+                .frame(width: 18, height: 2)
+            Rectangle()
+                .fill(isLocked ? Color.yellow : Color.white)
+                .frame(width: 2, height: 18)
+        }
+        .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
     }
 }

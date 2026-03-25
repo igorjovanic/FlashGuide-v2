@@ -13,7 +13,9 @@ final class LiveAssistViewModel: ObservableObject {
     @Published private(set) var depthSupportState: DepthSupportState
     @Published private(set) var isSessionRunning: Bool
     @Published private(set) var framePipelineState: CameraFramePipelineState
+    @Published private(set) var subjectSelectionSupport: CameraSubjectSelectionSupport
     @Published var tapSelection: UserTapSelection?
+    @Published var previewMarkerPoint: CGPoint?
     @Published var sceneInput = SceneInput.empty
 
     var session: AVCaptureSession {
@@ -28,6 +30,7 @@ final class LiveAssistViewModel: ObservableObject {
         self.depthSupportState = cameraService.depthSupportState
         self.isSessionRunning = cameraService.isSessionRunning
         self.framePipelineState = cameraService.framePipelineState
+        self.subjectSelectionSupport = cameraService.subjectSelectionSupport
         sceneInput.isDepthAvailable = cameraService.depthSupportState == .supported
     }
 
@@ -58,15 +61,29 @@ final class LiveAssistViewModel: ObservableObject {
         syncStateFromCamera()
     }
 
-    func selectPoint(x: Double, y: Double) {
+    func selectPoint(previewPoint: CGPoint, cameraPoint: CGPoint) {
+        guard !sceneInput.isSubjectSelectionLocked else { return }
+
         let selection = UserTapSelection(
-            normalizedX: max(0, min(1, x)),
-            normalizedY: max(0, min(1, y))
+            normalizedX: max(0, min(1, Double(cameraPoint.x))),
+            normalizedY: max(0, min(1, Double(cameraPoint.y)))
         )
         tapSelection = selection
+        previewMarkerPoint = CGPoint(
+            x: max(0, min(1, previewPoint.x)),
+            y: max(0, min(1, previewPoint.y))
+        )
         sceneInput.selectedTapPoint = selection
-        sceneInput.isSubjectSelectionLocked = true
         cameraService.selectSubject(at: selection.point)
+    }
+
+    func toggleSubjectSelectionLock() {
+        guard tapSelection != nil else { return }
+        sceneInput.isSubjectSelectionLocked.toggle()
+    }
+
+    func clearSelectionLock() {
+        sceneInput.isSubjectSelectionLocked = false
     }
 
     private func syncStateFromCamera() {
@@ -74,6 +91,7 @@ final class LiveAssistViewModel: ObservableObject {
         depthSupportState = cameraService.depthSupportState
         isSessionRunning = cameraService.isSessionRunning
         framePipelineState = cameraService.framePipelineState
+        subjectSelectionSupport = cameraService.subjectSelectionSupport
         sceneInput.isDepthAvailable = depthSupportState == .supported
     }
 }
