@@ -13,7 +13,7 @@ struct AppDependencies {
 
     static let live = AppDependencies(
         recommendationService: RecommendationService(),
-        cameraService: CameraService(),
+        cameraService: CameraSessionManager(),
         gearProfileRepository: GearProfileRepository(),
         settingsService: SettingsService()
     )
