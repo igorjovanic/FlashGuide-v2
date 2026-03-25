@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.appDependencies) private var dependencies
     @StateObject private var viewModel: SettingsViewModel
 
     init(viewModel: SettingsViewModel) {
@@ -19,6 +20,28 @@ struct SettingsView: View {
                     .onChange(of: viewModel.depthAssistanceEnabled) { _, _ in
                         viewModel.persist()
                     }
+            }
+
+            Section("Units") {
+                Picker("Distance Unit", selection: $viewModel.distanceUnit) {
+                    ForEach(DistanceUnit.allCases) { unit in
+                        Text(unit.displayName).tag(unit)
+                    }
+                }
+                .onChange(of: viewModel.distanceUnit) { _, _ in
+                    viewModel.persist()
+                }
+            }
+
+            Section("Defaults") {
+                NavigationLink("Manage Default Gear Setup") {
+                    GearProfilesView(
+                        viewModel: GearProfilesViewModel(
+                            repository: dependencies.gearProfileRepository,
+                            settingsService: dependencies.settingsService
+                        )
+                    )
+                }
             }
         }
         .navigationTitle("Settings")

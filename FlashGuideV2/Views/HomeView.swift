@@ -8,6 +8,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(\.appDependencies) private var dependencies
     @StateObject private var viewModel: HomeViewModel
+    @State private var showOnboarding = false
 
     init(viewModel: HomeViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -29,6 +30,7 @@ struct HomeView: View {
                     ManualCalculatorView(
                         viewModel: ManualCalculatorViewModel(
                             recommendationService: dependencies.recommendationService,
+                            historyService: dependencies.historyService,
                             settingsService: dependencies.settingsService
                         )
                     )
@@ -37,6 +39,7 @@ struct HomeView: View {
                         viewModel: LiveAssistViewModel(
                             cameraService: dependencies.cameraService,
                             recommendationService: dependencies.recommendationService,
+                            historyService: dependencies.historyService,
                             settingsService: dependencies.settingsService
                         )
                     )
@@ -47,12 +50,27 @@ struct HomeView: View {
                             settingsService: dependencies.settingsService
                         )
                     )
+                case .history:
+                    HistoryView(
+                        viewModel: HistoryViewModel(historyService: dependencies.historyService)
+                    )
+                case .help:
+                    HelpView()
                 case .settings:
                     SettingsView(
                         viewModel: SettingsViewModel(settingsService: dependencies.settingsService)
                     )
                 }
             }
+        }
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView {
+                dependencies.settingsService.hasCompletedOnboarding = true
+                showOnboarding = false
+            }
+        }
+        .onAppear {
+            showOnboarding = !dependencies.settingsService.hasCompletedOnboarding
         }
     }
 }

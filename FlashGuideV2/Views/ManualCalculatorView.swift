@@ -20,7 +20,15 @@ struct ManualCalculatorView: View {
     }
 
     var body: some View {
-        Form {
+        Group {
+            if viewModel.availableCameraBodies.isEmpty || viewModel.availableLenses.isEmpty || viewModel.availableFlashUnits.isEmpty {
+                ContentUnavailableView(
+                    "No Gear Available",
+                    systemImage: "camera.metering.unknown",
+                    description: Text("Add or seed gear profiles before calculating recommendations.")
+                )
+            } else {
+                Form {
             Section("Gear Selection") {
                 Picker("Camera Body", selection: $viewModel.selectedCameraBodyID) {
                     ForEach(viewModel.availableCameraBodies, id: \.id) { cameraBody in
@@ -89,6 +97,7 @@ struct ManualCalculatorView: View {
                     viewModel.generateRecommendation()
                 }
                 .frame(maxWidth: .infinity)
+                .accessibilityLabel("Calculate recommendation")
             }
 
             Section("Result") {
@@ -124,6 +133,8 @@ struct ManualCalculatorView: View {
                     Text("Select gear, enter a subject distance, choose an ambient preference, then tap Calculate.")
                         .foregroundStyle(.secondary)
                 }
+            }
+        }
             }
         }
         .navigationTitle("Manual Calculator")

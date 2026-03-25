@@ -7,6 +7,8 @@ import Foundation
 
 protocol SettingsServicing: AnyObject {
     var isDepthAssistanceEnabled: Bool { get set }
+    var distanceUnit: DistanceUnit { get set }
+    var hasCompletedOnboarding: Bool { get set }
     var defaultCameraBodyID: UUID? { get set }
     var defaultLensID: UUID? { get set }
     var defaultFlashUnitID: UUID? { get set }
@@ -15,6 +17,8 @@ protocol SettingsServicing: AnyObject {
 final class SettingsService: SettingsServicing {
     private let defaults = UserDefaults.standard
     private let depthAssistanceKey = "flashassist.settings.depthAssistanceEnabled"
+    private let distanceUnitKey = "flashassist.settings.distanceUnit"
+    private let onboardingCompletedKey = "flashassist.settings.hasCompletedOnboarding"
     private let defaultCameraBodyKey = "flashassist.settings.defaultCameraBodyID"
     private let defaultLensKey = "flashassist.settings.defaultLensID"
     private let defaultFlashUnitKey = "flashassist.settings.defaultFlashUnitID"
@@ -22,6 +26,21 @@ final class SettingsService: SettingsServicing {
     var isDepthAssistanceEnabled: Bool {
         get { defaults.object(forKey: depthAssistanceKey) as? Bool ?? true }
         set { defaults.set(newValue, forKey: depthAssistanceKey) }
+    }
+
+    var distanceUnit: DistanceUnit {
+        get {
+            let rawValue = defaults.string(forKey: distanceUnitKey) ?? DistanceUnit.meters.rawValue
+            return DistanceUnit(rawValue: rawValue) ?? .meters
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: distanceUnitKey)
+        }
+    }
+
+    var hasCompletedOnboarding: Bool {
+        get { defaults.object(forKey: onboardingCompletedKey) as? Bool ?? false }
+        set { defaults.set(newValue, forKey: onboardingCompletedKey) }
     }
 
     var defaultCameraBodyID: UUID? {

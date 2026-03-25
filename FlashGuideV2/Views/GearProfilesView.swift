@@ -22,11 +22,21 @@ struct GearProfilesView: View {
     }
 
     var body: some View {
-        List {
-            defaultSetupSection
-            cameraBodiesSection
-            lensesSection
-            flashUnitsSection
+        Group {
+            if cameraBodies.isEmpty && lenses.isEmpty && flashUnits.isEmpty {
+                ContentUnavailableView(
+                    "No Gear Profiles",
+                    systemImage: "camera.aperture",
+                    description: Text("Add a camera body, lens, or flash unit to get started.")
+                )
+            } else {
+                List {
+                    defaultSetupSection
+                    cameraBodiesSection
+                    lensesSection
+                    flashUnitsSection
+                }
+            }
         }
         .navigationTitle("Gear Profiles")
         .toolbar {

@@ -17,7 +17,15 @@ struct LiveAssistView: View {
     }
 
     var body: some View {
-        ScrollView {
+        Group {
+            if viewModel.availableCameraBodies.isEmpty || viewModel.availableLenses.isEmpty || viewModel.availableFlashUnits.isEmpty {
+                ContentUnavailableView(
+                    "Live Assist Needs Gear",
+                    systemImage: "viewfinder.circle",
+                    description: Text("Add or seed a camera body, lens, and flash profile before using Live Assist.")
+                )
+            } else {
+                ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 previewSection
 
@@ -221,6 +229,8 @@ struct LiveAssistView: View {
             }
             .padding()
         }
+            }
+        }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Live Assist")
         .navigationBarTitleDisplayMode(.inline)
@@ -285,6 +295,7 @@ struct LiveAssistView: View {
                     cameraPoint: tapResult.normalizedCameraPoint
                 )
             }
+            .accessibilityLabel("Live camera preview")
             .overlay(alignment: .center) {
                 GeometryReader { geometry in
                     if let markerPoint = viewModel.previewMarkerPoint {
@@ -360,6 +371,7 @@ private struct FocusMarkerView: View {
                 .frame(width: 2, height: 18)
         }
         .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+        .accessibilityHidden(true)
     }
 }
 
@@ -418,6 +430,8 @@ private struct RecommendationOverlayCard: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Live recommendation")
     }
 
     private func metric(_ title: String, _ value: String) -> some View {
