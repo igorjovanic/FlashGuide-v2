@@ -35,7 +35,9 @@ struct HomeView: View {
                 case .liveAssist:
                     LiveAssistView(
                         viewModel: LiveAssistViewModel(
-                            cameraService: dependencies.cameraService
+                            cameraService: dependencies.cameraService,
+                            recommendationService: dependencies.recommendationService,
+                            settingsService: dependencies.settingsService
                         )
                     )
                 case .gearProfiles:

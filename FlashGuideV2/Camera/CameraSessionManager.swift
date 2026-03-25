@@ -64,6 +64,7 @@ protocol CameraServicing: AnyObject {
     var depthSupportState: DepthSupportState { get }
     var depthEstimationState: CameraDepthEstimationState { get }
     var latestDepthEstimate: CameraDepthEstimate? { get }
+    var latestAmbientEstimate: Double? { get }
     var isSessionRunning: Bool { get }
     var framePipelineState: CameraFramePipelineState { get }
     var subjectSelectionSupport: CameraSubjectSelectionSupport { get }
@@ -75,7 +76,7 @@ protocol CameraServicing: AnyObject {
     func selectSubject(at point: CGPoint)
 }
 
-final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataOutputDelegate {
+final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataOutputDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let sessionQueue = DispatchQueue(label: "flashassist.camera.session", qos: .userInitiated)
     private let videoOutput = AVCaptureVideoDataOutput()
     private let depthOutput = AVCaptureDepthDataOutput()
@@ -85,6 +86,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
     private(set) var depthSupportState: DepthSupportState = .unknown
     private(set) var depthEstimationState: CameraDepthEstimationState = .unavailable
     private(set) var latestDepthEstimate: CameraDepthEstimate?
+    private(set) var latestAmbientEstimate: Double?
     private(set) var isSessionRunning = false
     private(set) var framePipelineState = CameraFramePipelineState.inactive
     private(set) var subjectSelectionSupport = CameraSubjectSelectionSupport.unavailable
@@ -94,6 +96,8 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
     private var isConfigured = false
     private var latestDepthData: AVDepthData?
     private var pendingDepthSamplePoint: CGPoint?
+    private var activeAmbientSamplePoint: CGPoint?
+    private var lastAmbientPublishTimestamp = Date.distantPast
 
     override init() {
         super.init()
@@ -153,6 +157,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
     func selectSubject(at point: CGPoint) {
         sessionQueue.async { [weak self] in
             guard let self, let device = self.videoDeviceInput?.device else { return }
+            self.activeAmbientSamplePoint = point
 
             do {
                 if device.isFocusPointOfInterestSupported || device.isExposurePointOfInterestSupported {
@@ -220,6 +225,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
             ]
             guard session.canAddOutput(videoOutput) else { return }
             session.addOutput(videoOutput)
+            videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
 
             var nextDepthSupportState: DepthSupportState = .unsupported
             let nextSubjectSelectionSupport = CameraSubjectSelectionSupport(
@@ -269,6 +275,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
             depthSupportState = .unknown
             depthEstimationState = .unavailable
             latestDepthEstimate = nil
+            latestAmbientEstimate = nil
             framePipelineState = .inactive
             subjectSelectionSupport = .unavailable
             return
@@ -278,6 +285,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
             depthSupportState = .unsupported
             depthEstimationState = .unavailable
             latestDepthEstimate = nil
+            latestAmbientEstimate = nil
             framePipelineState = .inactive
             subjectSelectionSupport = .unavailable
             return
@@ -348,6 +356,27 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
         }
     }
 
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        guard output === videoOutput, let point = activeAmbientSamplePoint else { return }
+        guard let estimate = CameraAmbientEstimator.estimate(from: sampleBuffer, around: point) else { return }
+
+        let now = Date()
+        let shouldPublish = latestAmbientEstimate == nil
+            || abs((latestAmbientEstimate ?? estimate) - estimate) > 0.12
+            || now.timeIntervalSince(lastAmbientPublishTimestamp) > 0.35
+
+        guard shouldPublish else { return }
+
+        lastAmbientPublishTimestamp = now
+        updateStateOnMain {
+            self.latestAmbientEstimate = estimate
+        }
+    }
+
     private func resolvePendingDepthEstimateIfPossible() {
         guard let point = pendingDepthSamplePoint, let depthData = latestDepthData else { return }
         guard let estimate = CameraDepthEstimator.estimate(from: depthData, around: point) else { return }
@@ -372,6 +401,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
             depthSupportState: depthSupportState,
             depthEstimationState: depthEstimationState,
             latestDepthEstimate: latestDepthEstimate,
+            latestAmbientEstimate: latestAmbientEstimate,
             isSessionRunning: isSessionRunning,
             framePipelineState: framePipelineState,
             subjectSelectionSupport: subjectSelectionSupport

@@ -4,9 +4,13 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct LiveAssistView: View {
     @StateObject private var viewModel: LiveAssistViewModel
+    @Query(sort: \CameraBody.createdAt) private var cameraBodies: [CameraBody]
+    @Query(sort: \Lens.createdAt) private var lenses: [Lens]
+    @Query(sort: \FlashUnit.createdAt) private var flashUnits: [FlashUnit]
 
     init(viewModel: LiveAssistViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -18,11 +22,44 @@ struct LiveAssistView: View {
                 previewSection
 
                 VStack(alignment: .leading, spacing: 12) {
+                    Text("Live Setup")
+                        .font(.headline)
+
+                    Picker("Camera", selection: $viewModel.selectedCameraBodyID) {
+                        ForEach(viewModel.availableCameraBodies, id: \.id) { cameraBody in
+                            Text("\(cameraBody.brand) \(cameraBody.model)").tag(cameraBody.id)
+                        }
+                    }
+
+                    Picker("Lens", selection: $viewModel.selectedLensID) {
+                        ForEach(viewModel.availableLenses, id: \.id) { lens in
+                            Text("\(lens.brand) \(lens.model)").tag(lens.id)
+                        }
+                    }
+
+                    Picker("Flash", selection: $viewModel.selectedFlashUnitID) {
+                        ForEach(viewModel.availableFlashUnits, id: \.id) { flashUnit in
+                            Text("\(flashUnit.brand) \(flashUnit.model)").tag(flashUnit.id)
+                        }
+                    }
+
+                    Picker("Ambient Preference", selection: $viewModel.ambientPreference) {
+                        ForEach(AmbientPreference.allCases) { preference in
+                            Text(preference.displayName).tag(preference)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Camera Status")
                         .font(.headline)
                     DetailRow(title: "Permission", value: viewModel.authorizationState.displayName)
                     DetailRow(title: "Session Running", value: viewModel.isSessionRunning ? "Yes" : "No")
                     DetailRow(title: "Depth Support", value: viewModel.depthSupportState.displayName)
+                    DetailRow(
+                        title: "Ambient Estimate",
+                        value: viewModel.latestAmbientEstimate.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "Pending"
+                    )
                     DetailRow(
                         title: "Focus Point Support",
                         value: viewModel.subjectSelectionSupport.supportsFocusPointOfInterest ? "Yes" : "No"
@@ -193,6 +230,18 @@ struct LiveAssistView: View {
         .onDisappear {
             viewModel.onDisappear()
         }
+        .onAppear {
+            syncPersistedGear()
+        }
+        .onChange(of: cameraBodies) { _, _ in
+            syncPersistedGear()
+        }
+        .onChange(of: lenses) { _, _ in
+            syncPersistedGear()
+        }
+        .onChange(of: flashUnits) { _, _ in
+            syncPersistedGear()
+        }
     }
 
     @ViewBuilder
@@ -206,6 +255,16 @@ struct LiveAssistView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 300)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+            if let recommendation = viewModel.recommendation {
+                RecommendationOverlayCard(
+                    recommendation: recommendation,
+                    distanceSourceLabel: viewModel.distanceSourceLabel,
+                    isConfidenceLow: viewModel.isConfidenceLow
+                )
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
 
             Text("Rear camera preview")
                 .font(.caption.weight(.semibold))
@@ -275,6 +334,14 @@ struct LiveAssistView: View {
             .blue
         }
     }
+
+    private func syncPersistedGear() {
+        viewModel.updateAvailableGear(
+            cameraBodies: cameraBodies.isEmpty ? CameraBody.mockData : cameraBodies,
+            lenses: lenses.isEmpty ? Lens.mockData : lenses,
+            flashUnits: flashUnits.isEmpty ? FlashUnit.mockData : flashUnits
+        )
+    }
 }
 
 private struct FocusMarkerView: View {
@@ -293,5 +360,74 @@ private struct FocusMarkerView: View {
                 .frame(width: 2, height: 18)
         }
         .shadow(color: .black.opacity(0.35), radius: 6, y: 2)
+    }
+}
+
+private struct RecommendationOverlayCard: View {
+    let recommendation: ExposureRecommendation
+    let distanceSourceLabel: String
+    let isConfidenceLow: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Live Recommendation")
+                    .font(.caption.weight(.semibold))
+                Spacer()
+                Text(distanceSourceLabel)
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.14), in: Capsule())
+            }
+
+            HStack(spacing: 12) {
+                metric("Shutter", recommendation.shutterSpeed)
+                metric("Aperture", recommendation.aperture)
+                metric("ISO", recommendation.iso)
+                metric("Flash", recommendation.flashPowerStep)
+            }
+
+            if let primaryReason = recommendation.reasoning.first {
+                Text(primaryReason)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let primaryWarning = recommendation.warnings.first {
+                Text(primaryWarning)
+                    .font(.caption2)
+                    .foregroundStyle(Color.yellow)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if isConfidenceLow {
+                Text("Low confidence")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.yellow.opacity(0.18), in: Capsule())
+                    .foregroundStyle(Color.yellow)
+            }
+        }
+        .padding(14)
+        .frame(width: 270)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func metric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.65))
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+        }
     }
 }
