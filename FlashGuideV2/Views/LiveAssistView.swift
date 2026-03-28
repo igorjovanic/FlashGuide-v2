@@ -26,40 +26,48 @@ struct LiveAssistView: View {
                 )
             } else {
                 ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                previewSection
+                    VStack(alignment: .leading, spacing: 20) {
+                        previewSection
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Live Setup")
-                        .font(.headline)
+                        if let recommendation = viewModel.recommendation {
+                            RecommendationOverlayCard(
+                                recommendation: recommendation,
+                                distanceSourceLabel: viewModel.distanceSourceLabel,
+                                isConfidenceLow: viewModel.isConfidenceLow
+                            )
+                        }
 
-                    Picker("Camera", selection: $viewModel.selectedCameraBodyID) {
-                        ForEach(viewModel.availableCameraBodies, id: \.id) { cameraBody in
-                            Text("\(cameraBody.brand) \(cameraBody.model)").tag(cameraBody.id)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Live Setup")
+                                .font(.headline)
+
+                            Picker("Camera", selection: $viewModel.selectedCameraBodyID) {
+                                ForEach(viewModel.availableCameraBodies, id: \.id) { cameraBody in
+                                    Text("\(cameraBody.brand) \(cameraBody.model)").tag(cameraBody.id)
+                                }
+                            }
+
+                            Picker("Lens", selection: $viewModel.selectedLensID) {
+                                ForEach(viewModel.availableLenses, id: \.id) { lens in
+                                    Text("\(lens.brand) \(lens.model)").tag(lens.id)
+                                }
+                            }
+
+                            Picker("Flash", selection: $viewModel.selectedFlashUnitID) {
+                                ForEach(viewModel.availableFlashUnits, id: \.id) { flashUnit in
+                                    Text("\(flashUnit.brand) \(flashUnit.model)").tag(flashUnit.id)
+                                }
+                            }
+
+                            Picker("Ambient Preference", selection: $viewModel.ambientPreference) {
+                                ForEach(AmbientPreference.allCases) { preference in
+                                    Text(preference.displayName).tag(preference)
+                                }
+                            }
                         }
                     }
-
-                    Picker("Lens", selection: $viewModel.selectedLensID) {
-                        ForEach(viewModel.availableLenses, id: \.id) { lens in
-                            Text("\(lens.brand) \(lens.model)").tag(lens.id)
-                        }
-                    }
-
-                    Picker("Flash", selection: $viewModel.selectedFlashUnitID) {
-                        ForEach(viewModel.availableFlashUnits, id: \.id) { flashUnit in
-                            Text("\(flashUnit.brand) \(flashUnit.model)").tag(flashUnit.id)
-                        }
-                    }
-
-                    Picker("Ambient Preference", selection: $viewModel.ambientPreference) {
-                        ForEach(AmbientPreference.allCases) { preference in
-                            Text(preference.displayName).tag(preference)
-                        }
-                    }
+                    .padding()
                 }
-            }
-            .padding()
-        }
             }
         }
         .background(Color(.systemGroupedBackground))
@@ -87,26 +95,14 @@ struct LiveAssistView: View {
 
     @ViewBuilder
     private var previewSection: some View {
-        ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.black)
-                .overlay {
-                    previewContent
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 300)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-
-            if let recommendation = viewModel.recommendation {
-                RecommendationOverlayCard(
-                    recommendation: recommendation,
-                    distanceSourceLabel: viewModel.distanceSourceLabel,
-                    isConfidenceLow: viewModel.isConfidenceLow
-                )
-                .padding(16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color.black)
+            .overlay {
+                previewContent
             }
-        }
+            .frame(maxWidth: .infinity)
+            .frame(height: 300)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     @ViewBuilder
@@ -237,7 +233,7 @@ private struct RecommendationOverlayCard: View {
             }
         }
         .padding(14)
-        .frame(width: 270)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
