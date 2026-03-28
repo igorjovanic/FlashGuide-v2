@@ -115,8 +115,6 @@ final class LiveAssistViewModel: ObservableObject {
     }
 
     func selectPoint(previewPoint: CGPoint, cameraPoint: CGPoint) {
-        guard !sceneInput.isSubjectSelectionLocked else { return }
-
         let selection = UserTapSelection(
             normalizedX: max(0, min(1, Double(cameraPoint.x))),
             normalizedY: max(0, min(1, Double(cameraPoint.y)))
@@ -130,27 +128,6 @@ final class LiveAssistViewModel: ObservableObject {
         sceneInput.depthEstimate = nil
         distanceInputError = nil
         cameraService.selectSubject(at: selection.point)
-        refreshRecommendation()
-    }
-
-    func toggleSubjectSelectionLock() {
-        guard tapSelection != nil else { return }
-        sceneInput.isSubjectSelectionLocked.toggle()
-        refreshRecommendation()
-    }
-
-    func clearSelectionLock() {
-        sceneInput.isSubjectSelectionLocked = false
-        refreshRecommendation()
-    }
-
-    func acceptEstimatedDistance() {
-        guard let meters = latestDepthEstimate?.value.acceptedMetersValue else { return }
-        sceneInput.depthEstimate = meters
-        sceneInput.manualDistanceOverride = nil
-        sceneInput.subjectDistanceMeters = meters
-        manualDistanceText = meters.formatted(.number.precision(.fractionLength(2)))
-        distanceInputError = nil
         refreshRecommendation()
     }
 
@@ -171,10 +148,6 @@ final class LiveAssistViewModel: ObservableObject {
         sceneInput.subjectDistanceMeters = value
         distanceInputError = nil
         refreshRecommendation()
-    }
-
-    var canAcceptEstimatedDistance: Bool {
-        latestDepthEstimate?.value.acceptedMetersValue != nil
     }
 
     var selectedCameraBody: CameraBody? {
