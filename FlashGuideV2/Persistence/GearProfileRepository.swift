@@ -38,7 +38,14 @@ struct GearProfileRepository {
     }
 
     func makeFlashUnit() -> FlashUnit {
-        FlashUnit()
+        FlashUnit(
+            brand: "",
+            model: "",
+            guideNumber: 36.0,
+            guideNumberISOReference: 100,
+            supportedPowerSteps: ["1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128"],
+            notes: ""
+        )
     }
 
     func save(_ cameraBody: CameraBody, using modelContext: ModelContext) throws {

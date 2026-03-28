@@ -758,9 +758,10 @@ private struct LensEditorView: View {
 
 private struct FlashUnitEditorView: View {
     @Environment(\.dismiss) private var dismiss
-    @Bindable var flashUnit: FlashUnit
-    @State private var powerStepsText: String
-    @State private var validationMessage: String?
+    let flashUnit: FlashUnit
+    @State private var flashName: String
+    @State private var guideNumberText: String
+    @State private var selectedPowerSteps: Set<String>
     let title: String
     let isNewRecord: Bool
     let onSave: (FlashUnit) throws -> Void
@@ -775,84 +776,241 @@ private struct FlashUnitEditorView: View {
         self.flashUnit = flashUnit
         self.isNewRecord = isNewRecord
         self.onSave = onSave
-        _powerStepsText = State(initialValue: flashUnit.supportedPowerSteps.joined(separator: ", "))
+        _flashName = State(initialValue: [flashUnit.brand, flashUnit.model]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+            .joined(separator: " "))
+        _guideNumberText = State(initialValue: Self.guideNumberText(for: flashUnit.guideNumber))
+        _selectedPowerSteps = State(initialValue: Set(flashUnit.supportedPowerSteps))
     }
 
     var body: some View {
-        Form {
-            if let validationMessage {
-                Section {
-                    Text(validationMessage)
-                        .foregroundStyle(.red)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Flash")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 0) {
+                        TextField("Eg. Godox TT685", text: $flashName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 18)
+                            .padding(.top, 16)
+                            .padding(.bottom, 18)
+
+                        editorDivider
+
+                        HStack(spacing: 12) {
+                            Text("Guide Number")
+                                .foregroundStyle(.primary)
+
+                            Spacer()
+
+                            TextField("36", text: guideNumberBinding)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 72)
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                    }
+                    .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
-            }
 
-            Section("Identity") {
-                TextField("Brand", text: $flashUnit.brand)
-                TextField("Model", text: $flashUnit.model)
-            }
+                Text("Guide number is stored in meters at ISO 100.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 2)
 
-            Section("Output") {
-                TextField("Guide Number", value: $flashUnit.guideNumber, format: .number.precision(.fractionLength(0)))
-                    .keyboardType(.decimalPad)
-                TextField("ISO Reference", value: $flashUnit.guideNumberISOReference, format: .number)
-                    .keyboardType(.numberPad)
-                TextField("Power Steps", text: $powerStepsText, axis: .vertical)
-                TextField("Notes", text: $flashUnit.notes, axis: .vertical)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Power Steps")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 0) {
+                        ForEach(powerStepOptions.indices, id: \.self) { index in
+                            powerStepRow(step: powerStepOptions[index])
+
+                            if index < powerStepOptions.count - 1 {
+                                editorDivider
+                            }
+                        }
+                    }
+                    .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                    Text("Select only the manual power steps this flash actually supports.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 2)
+                }
+
+                Text("Select the manual power steps supported by this flash unit.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 32)
         }
+        .background(Color(.systemBackground))
+        .navigationBarTitleDisplayMode(.large)
         .navigationTitle(title)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Save") {
-                    guard validate() else { return }
-                    flashUnit.supportedPowerSteps = parsedPowerSteps
-                    try? onSave(flashUnit)
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Cancel") {
                     dismiss()
                 }
             }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Save") {
+                    guard validate() else { return }
+                    try? onSave(flashUnit)
+                    dismiss()
+                }
+                .disabled(isSaveDisabled)
+            }
         }
         .onDisappear {
-            if validate(silent: true) {
-                flashUnit.supportedPowerSteps = parsedPowerSteps
-            }
             if isNewRecord == false, validate(silent: true) {
                 try? onSave(flashUnit)
             }
         }
     }
 
-    private var parsedPowerSteps: [String] {
-        powerStepsText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
+    private var powerStepOptions: [String] {
+        ["1/1", "1/2", "1/4", "1/8", "1/16", "1/32", "1/64", "1/128"]
+    }
+
+    private func powerStepRow(step: String) -> some View {
+        HStack(spacing: 12) {
+            Text(step)
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Toggle(step, isOn: powerStepBinding(for: step))
+                .labelsHidden()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+    }
+
+    private var editorDivider: some View {
+        Divider()
+            .padding(.leading, 18)
+    }
+
+    private var editorCardColor: Color {
+        Color(.secondarySystemBackground)
+    }
+
+    private var guideNumberBinding: Binding<String> {
+        Binding(
+            get: { guideNumberText },
+            set: { newValue in
+                var filtered = newValue.filter { $0.isNumber || $0 == "." || $0 == "," }
+
+                if let commaIndex = filtered.firstIndex(of: ",") {
+                    filtered.replaceSubrange(commaIndex...commaIndex, with: ".")
+                }
+
+                let parts = filtered.split(separator: ".", omittingEmptySubsequences: false)
+                if parts.count > 2 {
+                    filtered = parts.prefix(2).joined(separator: ".")
+                }
+
+                if let dotIndex = filtered.firstIndex(of: ".") {
+                    let fractionalStart = filtered.index(after: dotIndex)
+                    let fractionalDigits = filtered[fractionalStart...].filter(\.isNumber)
+                    filtered = String(filtered[..<fractionalStart]) + fractionalDigits.prefix(1)
+                }
+
+                guideNumberText = filtered
+            }
+        )
+    }
+
+    private func powerStepBinding(for step: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedPowerSteps.contains(step) },
+            set: { isEnabled in
+                if isEnabled {
+                    selectedPowerSteps.insert(step)
+                } else {
+                    selectedPowerSteps.remove(step)
+                }
+            }
+        )
+    }
+
+    private var isSaveDisabled: Bool {
+        currentValidationMessage != nil
     }
 
     private func validate(silent: Bool = false) -> Bool {
-        let trimmedBrand = flashUnit.brand.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedModel = flashUnit.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = currentValidationMessage
 
-        let message: String?
-
-        if trimmedBrand.isEmpty {
-            message = "Brand is required."
-        } else if trimmedModel.isEmpty {
-            message = "Model is required."
-        } else if flashUnit.guideNumber <= 0 {
-            message = "Guide number must be greater than zero."
-        } else if flashUnit.guideNumberISOReference <= 0 {
-            message = "Guide number ISO reference must be greater than zero."
-        } else if parsedPowerSteps.isEmpty {
-            message = "At least one flash power step is required."
-        } else {
-            message = nil
-        }
-
-        if silent == false {
-            validationMessage = message
+        if message == nil {
+            applyFlashDraft()
         }
 
         return message == nil
+    }
+
+    private var currentValidationMessage: String? {
+        let trimmedName = flashName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedGuideNumber = Double(guideNumberText.replacingOccurrences(of: ",", with: "."))
+
+        if trimmedName.isEmpty {
+            return "Flash name is required."
+        }
+
+        guard let parsedGuideNumber else {
+            return "Guide number must be greater than zero."
+        }
+
+        if parsedGuideNumber <= 0 {
+            return "Guide number must be greater than zero."
+        }
+
+        if selectedPowerSteps.isEmpty {
+            return "At least one flash power step is required."
+        }
+
+        return nil
+    }
+
+    private func applyFlashDraft() {
+        flashUnit.guideNumber = Double(guideNumberText.replacingOccurrences(of: ",", with: ".")) ?? flashUnit.guideNumber
+        flashUnit.guideNumberISOReference = 100
+        flashUnit.supportedPowerSteps = powerStepOptions.filter { selectedPowerSteps.contains($0) }
+        flashUnit.notes = ""
+
+        let trimmedName = flashName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmedName.split(whereSeparator: \.isWhitespace)
+
+        guard let firstPart = parts.first else {
+            flashUnit.brand = ""
+            flashUnit.model = ""
+            return
+        }
+
+        flashUnit.brand = String(firstPart)
+        flashUnit.model = parts.dropFirst().joined(separator: " ")
+    }
+
+    private static func guideNumberText(for value: Double) -> String {
+        let roundedValue = value.rounded()
+        if abs(value - roundedValue) < 0.0001 {
+            return String(Int(roundedValue))
+        }
+
+        return value.formatted(.number.precision(.fractionLength(1)))
     }
 }
