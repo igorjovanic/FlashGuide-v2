@@ -185,6 +185,8 @@ private struct FocusMarkerView: View {
 }
 
 private struct RecommendationOverlayCard: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let recommendation: ExposureRecommendation
     let distanceSourceLabel: String
     let isConfidenceLow: Bool
@@ -199,7 +201,7 @@ private struct RecommendationOverlayCard: View {
                     .font(.caption2.weight(.medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.14), in: Capsule())
+                    .background(secondaryBadgeBackground, in: Capsule())
             }
 
             HStack(spacing: 12) {
@@ -212,14 +214,14 @@ private struct RecommendationOverlayCard: View {
             if let primaryReason = recommendation.reasoning.first {
                 Text(primaryReason)
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(secondaryTextColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if let primaryWarning = recommendation.warnings.first {
                 Text(primaryWarning)
                     .font(.caption2)
-                    .foregroundStyle(Color.yellow)
+                    .foregroundStyle(warningTextColor)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -228,16 +230,17 @@ private struct RecommendationOverlayCard: View {
                     .font(.caption2.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.yellow.opacity(0.18), in: Capsule())
-                    .foregroundStyle(Color.yellow)
+                    .background(confidenceBadgeBackground, in: Capsule())
+                    .foregroundStyle(confidenceBadgeTextColor)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .foregroundStyle(primaryTextColor)
+        .background(cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(borderColor, lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Live recommendation")
@@ -247,10 +250,46 @@ private struct RecommendationOverlayCard: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.caption2)
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundStyle(metricLabelColor)
             Text(value)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryTextColor)
         }
+    }
+
+    private var cardBackground: some ShapeStyle {
+        colorScheme == .dark ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color(.secondarySystemBackground))
+    }
+
+    private var primaryTextColor: Color {
+        colorScheme == .dark ? .white : .primary
+    }
+
+    private var secondaryTextColor: Color {
+        colorScheme == .dark ? .white.opacity(0.92) : .secondary
+    }
+
+    private var metricLabelColor: Color {
+        colorScheme == .dark ? .white.opacity(0.65) : .secondary
+    }
+
+    private var secondaryBadgeBackground: Color {
+        colorScheme == .dark ? Color.white.opacity(0.14) : Color.black.opacity(0.06)
+    }
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+    }
+
+    private var confidenceBadgeBackground: Color {
+        colorScheme == .dark ? Color.yellow.opacity(0.18) : Color(red: 1.0, green: 0.94, blue: 0.78)
+    }
+
+    private var confidenceBadgeTextColor: Color {
+        colorScheme == .dark ? Color.yellow : Color(red: 0.45, green: 0.24, blue: 0.02)
+    }
+
+    private var warningTextColor: Color {
+        colorScheme == .dark ? Color.yellow : Color(red: 0.45, green: 0.24, blue: 0.02)
     }
 }
