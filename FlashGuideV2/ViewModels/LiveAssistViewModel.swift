@@ -164,11 +164,11 @@ final class LiveAssistViewModel: ObservableObject {
 
     var distanceSourceLabel: String {
         if sceneInput.manualDistanceOverride != nil {
-            "Manual override"
+            "Manual distance: \(formattedDistance(sceneInput.subjectDistanceMeters))"
         } else if sceneInput.depthEstimate != nil {
-            "Estimated distance"
+            "Estimated distance: \(formattedDistance(sceneInput.subjectDistanceMeters))"
         } else {
-            "Base subject distance"
+            "Base distance: \(formattedDistance(sceneInput.subjectDistanceMeters))"
         }
     }
 
@@ -280,5 +280,9 @@ final class LiveAssistViewModel: ObservableObject {
         recommendation = nextRecommendation
 
         guard tapSelection != nil else { return }
+    }
+
+    private func formattedDistance(_ meters: Double) -> String {
+        meters.formatted(.number.precision(.fractionLength(0...1))) + "m"
     }
 }
