@@ -15,8 +15,10 @@ enum FlashAssistModelContainer {
 
     static func previewContainer() -> ModelContainer {
         let container = makeContainer(isStoredInMemoryOnly: true)
-        let repository = GearProfileRepository()
-        repository.seedSampleDataIfNeeded(using: container.mainContext, settingsService: SettingsService())
+        CameraBody.mockData.forEach(container.mainContext.insert)
+        Lens.mockData.forEach(container.mainContext.insert)
+        FlashUnit.mockData.forEach(container.mainContext.insert)
+        try? container.mainContext.save()
         return container
     }
 

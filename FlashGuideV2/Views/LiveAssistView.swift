@@ -22,7 +22,7 @@ struct LiveAssistView: View {
                 ContentUnavailableView(
                     "Live Assist Needs Gear",
                     systemImage: "viewfinder.circle",
-                    description: Text("Add or seed a camera body, lens, and flash profile before using Live Assist.")
+                    description: Text("Add your camera body, lens, and flash profiles before using Live Assist.")
                 )
             } else {
                 ScrollView {
@@ -348,9 +348,9 @@ struct LiveAssistView: View {
 
     private func syncPersistedGear() {
         viewModel.updateAvailableGear(
-            cameraBodies: cameraBodies.isEmpty ? CameraBody.mockData : cameraBodies,
-            lenses: lenses.isEmpty ? Lens.mockData : lenses,
-            flashUnits: flashUnits.isEmpty ? FlashUnit.mockData : flashUnits
+            cameraBodies: cameraBodies,
+            lenses: lenses,
+            flashUnits: flashUnits
         )
     }
 }

@@ -15,11 +15,6 @@ struct FlashAssistApp: App {
         let dependencies = AppDependencies.live
         let modelContainer = FlashAssistModelContainer.makeSharedContainer()
 
-        dependencies.gearProfileRepository.seedSampleDataIfNeeded(
-            using: modelContainer.mainContext,
-            settingsService: dependencies.settingsService
-        )
-
         self.dependencies = dependencies
         self.modelContainer = modelContainer
     }

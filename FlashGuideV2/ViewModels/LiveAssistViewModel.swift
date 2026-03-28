@@ -47,9 +47,9 @@ final class LiveAssistViewModel: ObservableObject {
         recommendationService: RecommendationServicing,
         historyService: RecommendationHistoryServicing,
         settingsService: SettingsServicing,
-        availableCameraBodies: [CameraBody] = CameraBody.mockData,
-        availableLenses: [Lens] = Lens.mockData,
-        availableFlashUnits: [FlashUnit] = FlashUnit.mockData
+        availableCameraBodies: [CameraBody] = [],
+        availableLenses: [Lens] = [],
+        availableFlashUnits: [FlashUnit] = []
     ) {
         self.cameraService = cameraService
         self.recommendationService = recommendationService

@@ -6,23 +6,6 @@
 import SwiftData
 
 struct GearProfileRepository {
-    func seedSampleDataIfNeeded(using modelContext: ModelContext, settingsService: SettingsServicing) {
-        var descriptor = FetchDescriptor<CameraBody>()
-        descriptor.fetchLimit = 1
-
-        guard (try? modelContext.fetch(descriptor).isEmpty) != false else {
-            applyDefaultSetupIfNeeded(settingsService: settingsService)
-            return
-        }
-
-        CameraBody.mockData.forEach(modelContext.insert)
-        Lens.mockData.forEach(modelContext.insert)
-        FlashUnit.mockData.forEach(modelContext.insert)
-
-        try? modelContext.save()
-        applyDefaultSetupIfNeeded(settingsService: settingsService)
-    }
-
     func makeCameraBody() -> CameraBody {
         CameraBody()
     }
@@ -74,9 +57,4 @@ struct GearProfileRepository {
         try modelContext.save()
     }
 
-    private func applyDefaultSetupIfNeeded(settingsService: SettingsServicing) {
-        settingsService.defaultCameraBodyID = settingsService.defaultCameraBodyID ?? CameraBody.mockData.first?.id
-        settingsService.defaultLensID = settingsService.defaultLensID ?? Lens.mockData.first?.id
-        settingsService.defaultFlashUnitID = settingsService.defaultFlashUnitID ?? FlashUnit.mockData.first?.id
-    }
 }

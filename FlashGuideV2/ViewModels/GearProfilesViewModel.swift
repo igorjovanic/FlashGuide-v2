@@ -16,10 +16,6 @@ final class GearProfilesViewModel: ObservableObject {
         self.settingsService = settingsService
     }
 
-    func seedIfNeeded(using modelContext: ModelContext) {
-        repository.seedSampleDataIfNeeded(using: modelContext, settingsService: settingsService)
-    }
-
     var defaultCameraBodyID: UUID? {
         get { settingsService.defaultCameraBodyID }
         set { settingsService.defaultCameraBodyID = newValue }

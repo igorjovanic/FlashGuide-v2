@@ -81,33 +81,28 @@ struct GearProfilesView: View {
                 }
             }
         }
-        .onAppear {
-            viewModel.seedIfNeeded(using: modelContext)
-        }
     }
 
     private var defaultSetupSection: some View {
         Section("Default Setup") {
-            if cameraBodies.isEmpty || lenses.isEmpty || flashUnits.isEmpty {
-                Text("Sample data will appear after the first launch seed completes.")
-                    .foregroundStyle(.secondary)
-            } else {
-                Picker("Camera Body", selection: defaultCameraBodyBinding) {
-                    ForEach(cameraBodies, id: \.id) { cameraBody in
-                        Text("\(cameraBody.brand) \(cameraBody.model)").tag(Optional(cameraBody.id))
-                    }
+            Picker("Camera Body", selection: defaultCameraBodyBinding) {
+                Text("None").tag(Optional<UUID>.none)
+                ForEach(cameraBodies, id: \.id) { cameraBody in
+                    Text("\(cameraBody.brand) \(cameraBody.model)").tag(Optional(cameraBody.id))
                 }
+            }
 
-                Picker("Lens", selection: defaultLensBinding) {
-                    ForEach(lenses, id: \.id) { lens in
-                        Text("\(lens.brand) \(lens.model)").tag(Optional(lens.id))
-                    }
+            Picker("Lens", selection: defaultLensBinding) {
+                Text("None").tag(Optional<UUID>.none)
+                ForEach(lenses, id: \.id) { lens in
+                    Text("\(lens.brand) \(lens.model)").tag(Optional(lens.id))
                 }
+            }
 
-                Picker("Flash Unit", selection: defaultFlashUnitBinding) {
-                    ForEach(flashUnits, id: \.id) { flashUnit in
-                        Text("\(flashUnit.brand) \(flashUnit.model)").tag(Optional(flashUnit.id))
-                    }
+            Picker("Flash Unit", selection: defaultFlashUnitBinding) {
+                Text("None").tag(Optional<UUID>.none)
+                ForEach(flashUnits, id: \.id) { flashUnit in
+                    Text("\(flashUnit.brand) \(flashUnit.model)").tag(Optional(flashUnit.id))
                 }
             }
         }
@@ -223,21 +218,21 @@ struct GearProfilesView: View {
 
     private var defaultCameraBodyBinding: Binding<UUID?> {
         Binding(
-            get: { viewModel.defaultCameraBodyID ?? cameraBodies.first?.id },
+            get: { viewModel.defaultCameraBodyID },
             set: { viewModel.defaultCameraBodyID = $0 }
         )
     }
 
     private var defaultLensBinding: Binding<UUID?> {
         Binding(
-            get: { viewModel.defaultLensID ?? lenses.first?.id },
+            get: { viewModel.defaultLensID },
             set: { viewModel.defaultLensID = $0 }
         )
     }
 
     private var defaultFlashUnitBinding: Binding<UUID?> {
         Binding(
-            get: { viewModel.defaultFlashUnitID ?? flashUnits.first?.id },
+            get: { viewModel.defaultFlashUnitID },
             set: { viewModel.defaultFlashUnitID = $0 }
         )
     }

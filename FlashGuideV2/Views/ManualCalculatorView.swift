@@ -25,7 +25,7 @@ struct ManualCalculatorView: View {
                 ContentUnavailableView(
                     "No Gear Available",
                     systemImage: "camera.metering.unknown",
-                    description: Text("Add or seed gear profiles before calculating recommendations.")
+                    description: Text("Add your camera body, lens, and flash profiles before calculating recommendations.")
                 )
             } else {
                 Form {
@@ -158,9 +158,9 @@ struct ManualCalculatorView: View {
 
     private func syncPersistedGear() {
         viewModel.updateAvailableGear(
-            cameraBodies: cameraBodies.isEmpty ? CameraBody.mockData : cameraBodies,
-            lenses: lenses.isEmpty ? Lens.mockData : lenses,
-            flashUnits: flashUnits.isEmpty ? FlashUnit.mockData : flashUnits
+            cameraBodies: cameraBodies,
+            lenses: lenses,
+            flashUnits: flashUnits
         )
     }
 }

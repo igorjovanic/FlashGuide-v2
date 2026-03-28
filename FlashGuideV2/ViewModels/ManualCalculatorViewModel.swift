@@ -26,9 +26,9 @@ final class ManualCalculatorViewModel: ObservableObject {
         recommendationService: RecommendationServicing = RecommendationService(),
         historyService: RecommendationHistoryServicing = RecommendationHistoryService(),
         settingsService: SettingsServicing = SettingsService(),
-        availableCameraBodies: [CameraBody] = CameraBody.mockData,
-        availableLenses: [Lens] = Lens.mockData,
-        availableFlashUnits: [FlashUnit] = FlashUnit.mockData
+        availableCameraBodies: [CameraBody] = [],
+        availableLenses: [Lens] = [],
+        availableFlashUnits: [FlashUnit] = []
     ) {
         self.recommendationService = recommendationService
         self.historyService = historyService
