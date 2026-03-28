@@ -27,7 +27,14 @@ struct GearProfileRepository {
     }
 
     func makeLens() -> Lens {
-        Lens()
+        Lens(
+            brand: "",
+            model: "",
+            minAperture: 2.8,
+            maxAperture: 16.0,
+            isVariableAperture: false,
+            focalLengthDescription: nil
+        )
     }
 
     func makeFlashUnit() -> FlashUnit {

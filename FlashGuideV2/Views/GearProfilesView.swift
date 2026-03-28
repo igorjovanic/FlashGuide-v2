@@ -248,8 +248,11 @@ private enum AddGearSheet: String, Identifiable {
 
 private struct CameraBodyEditorView: View {
     @Environment(\.dismiss) private var dismiss
-    @Bindable var cameraBody: CameraBody
+    let cameraBody: CameraBody
     @State private var cameraName: String
+    @State private var syncSpeedDenominator: String
+    @State private var minISOText: String
+    @State private var maxISOText: String
     @State private var validationMessage: String?
     let title: String
     let isNewRecord: Bool
@@ -269,6 +272,11 @@ private struct CameraBodyEditorView: View {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { $0.isEmpty == false }
             .joined(separator: " "))
+        _syncSpeedDenominator = State(initialValue: cameraBody.flashSyncSpeed
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "1/", with: ""))
+        _minISOText = State(initialValue: cameraBody.minISO > 0 ? String(cameraBody.minISO) : "")
+        _maxISOText = State(initialValue: cameraBody.maxISO > 0 ? String(cameraBody.maxISO) : "")
     }
 
     var body: some View {
@@ -295,9 +303,9 @@ private struct CameraBodyEditorView: View {
                     VStack(spacing: 0) {
                         syncSpeedRow
                         editorDivider
-                        isoRow(title: "Minimum ISO", value: $cameraBody.minISO)
+                        integerRow(title: "Minimum ISO", text: $minISOText)
                         editorDivider
-                        isoRow(title: "Maximum ISO", value: $cameraBody.maxISO)
+                        integerRow(title: "Maximum ISO", text: $maxISOText)
                     }
                     .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
@@ -363,7 +371,7 @@ private struct CameraBodyEditorView: View {
             Text("1/")
                 .foregroundStyle(.secondary)
 
-            TextField("125", text: syncSpeedDenominatorBinding)
+            TextField("125", text: digitsOnlyBinding(for: $syncSpeedDenominator))
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 56)
@@ -372,14 +380,14 @@ private struct CameraBodyEditorView: View {
         .padding(.vertical, 16)
     }
 
-    private func isoRow(title: String, value: Binding<Int>) -> some View {
+    private func integerRow(title: String, text: Binding<String>) -> some View {
         HStack(spacing: 12) {
             Text(title)
                 .foregroundStyle(.primary)
 
             Spacer()
 
-            TextField(title, value: value, format: .number)
+            TextField(title, text: digitsOnlyBinding(for: text))
                 .keyboardType(.numberPad)
                 .multilineTextAlignment(.trailing)
                 .frame(width: 84)
@@ -397,16 +405,11 @@ private struct CameraBodyEditorView: View {
         Color(.secondarySystemBackground)
     }
 
-    private var syncSpeedDenominatorBinding: Binding<String> {
+    private func digitsOnlyBinding(for text: Binding<String>) -> Binding<String> {
         Binding(
-            get: {
-                cameraBody.flashSyncSpeed
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: "1/", with: "")
-            },
+            get: { text.wrappedValue },
             set: { newValue in
-                let digits = newValue.filter(\.isNumber)
-                cameraBody.flashSyncSpeed = digits.isEmpty ? "" : "1/\(digits)"
+                text.wrappedValue = newValue.filter(\.isNumber)
             }
         )
     }
@@ -419,7 +422,7 @@ private struct CameraBodyEditorView: View {
         let message = currentValidationMessage
 
         if message == nil {
-            applyCameraName()
+            applyCameraBodyDraft()
         }
 
         if silent == false {
@@ -431,7 +434,9 @@ private struct CameraBodyEditorView: View {
 
     private var currentValidationMessage: String? {
         let trimmedName = cameraName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSync = cameraBody.flashSyncSpeed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSync = syncSpeedDenominator.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedMinISO = Int(minISOText.trimmingCharacters(in: .whitespacesAndNewlines))
+        let parsedMaxISO = Int(maxISOText.trimmingCharacters(in: .whitespacesAndNewlines))
 
         if trimmedName.isEmpty {
             return "Camera name is required."
@@ -441,18 +446,33 @@ private struct CameraBodyEditorView: View {
             return "Flash sync speed is required."
         }
 
-        if cameraBody.minISO <= 0 {
+        guard let parsedMinISO else {
             return "Minimum ISO must be greater than zero."
         }
 
-        if cameraBody.maxISO < cameraBody.minISO {
+        if parsedMinISO <= 0 {
+            return "Minimum ISO must be greater than zero."
+        }
+
+        guard let parsedMaxISO else {
+            return "Maximum ISO must be greater than or equal to minimum ISO."
+        }
+
+        if parsedMaxISO < parsedMinISO {
             return "Maximum ISO must be greater than or equal to minimum ISO."
         }
 
         return nil
     }
 
-    private func applyCameraName() {
+    private func applyCameraBodyDraft() {
+        let parsedMinISO = Int(minISOText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? cameraBody.minISO
+        let parsedMaxISO = Int(maxISOText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? cameraBody.maxISO
+
+        cameraBody.flashSyncSpeed = "1/\(syncSpeedDenominator)"
+        cameraBody.minISO = parsedMinISO
+        cameraBody.maxISO = parsedMaxISO
+
         let trimmedName = cameraName.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = trimmedName.split(whereSeparator: \.isWhitespace)
 
@@ -469,43 +489,113 @@ private struct CameraBodyEditorView: View {
 
 private struct LensEditorView: View {
     @Environment(\.dismiss) private var dismiss
-    @Bindable var lens: Lens
+    let lens: Lens
+    @State private var lensName: String
+    @State private var minApertureText: String
+    @State private var maxApertureText: String
     @State private var validationMessage: String?
     let title: String
     let isNewRecord: Bool
     let onSave: (Lens) throws -> Void
 
+    init(
+        lens: Lens,
+        title: String,
+        isNewRecord: Bool,
+        onSave: @escaping (Lens) throws -> Void
+    ) {
+        self.lens = lens
+        self.title = title
+        self.isNewRecord = isNewRecord
+        self.onSave = onSave
+        _lensName = State(initialValue: [
+            lens.focalLengthDescription,
+            [lens.brand, lens.model]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { $0.isEmpty == false }
+                .joined(separator: " ")
+        ]
+        .compactMap { value in
+            guard let value else { return nil }
+            let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedValue.isEmpty ? nil : trimmedValue
+        }
+        .joined(separator: " "))
+        _minApertureText = State(initialValue: Self.apertureText(for: lens.minAperture))
+        _maxApertureText = State(initialValue: Self.apertureText(for: lens.maxAperture))
+    }
+
     var body: some View {
-        Form {
-            if let validationMessage {
-                Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Lens")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    TextField("Eg. 50mm f/1.8", text: $lensName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Aperture Range")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 0) {
+                        apertureRow(title: "Widest Aperture", text: $minApertureText)
+                        editorDivider
+                        apertureRow(title: "Narrowest Aperture", text: $maxApertureText)
+                    }
+                    .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                    Text("Enter the widest and narrowest f-stops this lens can use.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 2)
+                }
+
+                if let validationMessage {
                     Text(validationMessage)
                         .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                } else {
+                    Text("Use numeric f-stop values such as 1.8, 2.8, 8, or 16.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
             }
-
-            Section("Identity") {
-                TextField("Brand", text: $lens.brand)
-                TextField("Model", text: $lens.model)
-                TextField("Focal Length Description", text: focalLengthBinding)
-            }
-
-            Section("Optics") {
-                TextField("Minimum Aperture", value: $lens.minAperture, format: .number.precision(.fractionLength(1)))
-                    .keyboardType(.decimalPad)
-                TextField("Maximum Aperture", value: $lens.maxAperture, format: .number.precision(.fractionLength(1)))
-                    .keyboardType(.decimalPad)
-                Toggle("Variable Aperture", isOn: $lens.isVariableAperture)
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 32)
         }
+        .background(Color(.systemBackground))
+        .navigationBarTitleDisplayMode(.large)
         .navigationTitle(title)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Cancel") {
+                    dismiss()
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") {
                     guard validate() else { return }
                     try? onSave(lens)
                     dismiss()
                 }
+                .disabled(isSaveDisabled)
             }
         }
         .onDisappear {
@@ -515,29 +605,69 @@ private struct LensEditorView: View {
         }
     }
 
-    private var focalLengthBinding: Binding<String> {
+    private func apertureRow(title: String, text: Binding<String>) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Text("f/")
+                .foregroundStyle(.secondary)
+
+            TextField(title, text: apertureBinding(for: text))
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 72)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+    }
+
+    private var editorDivider: some View {
+        Divider()
+            .padding(.leading, 18)
+    }
+
+    private var editorCardColor: Color {
+        Color(.secondarySystemBackground)
+    }
+
+    private func apertureBinding(for text: Binding<String>) -> Binding<String> {
         Binding(
-            get: { lens.focalLengthDescription ?? "" },
-            set: { lens.focalLengthDescription = $0.isEmpty ? nil : $0 }
+            get: { text.wrappedValue },
+            set: { newValue in
+                var filtered = newValue.filter { $0.isNumber || $0 == "." || $0 == "," }
+
+                if let commaIndex = filtered.firstIndex(of: ",") {
+                    filtered.replaceSubrange(commaIndex...commaIndex, with: ".")
+                }
+
+                let parts = filtered.split(separator: ".", omittingEmptySubsequences: false)
+                if parts.count > 2 {
+                    filtered = parts.prefix(2).joined(separator: ".")
+                }
+
+                if let dotIndex = filtered.firstIndex(of: ".") {
+                    let fractionalStart = filtered.index(after: dotIndex)
+                    let fractionalDigits = filtered[fractionalStart...].filter(\.isNumber)
+                    filtered = String(filtered[..<fractionalStart]) + fractionalDigits.prefix(1)
+                }
+
+                text.wrappedValue = filtered
+            }
         )
     }
 
+    private var isSaveDisabled: Bool {
+        currentValidationMessage != nil
+    }
+
     private func validate(silent: Bool = false) -> Bool {
-        let trimmedBrand = lens.brand.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedModel = lens.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = currentValidationMessage
 
-        let message: String?
-
-        if trimmedBrand.isEmpty {
-            message = "Brand is required."
-        } else if trimmedModel.isEmpty {
-            message = "Model is required."
-        } else if lens.minAperture <= 0 {
-            message = "Minimum aperture must be greater than zero."
-        } else if lens.maxAperture < lens.minAperture {
-            message = "Maximum aperture must be greater than or equal to minimum aperture."
-        } else {
-            message = nil
+        if message == nil {
+            applyLensDraft()
         }
 
         if silent == false {
@@ -545,6 +675,84 @@ private struct LensEditorView: View {
         }
 
         return message == nil
+    }
+
+    private var currentValidationMessage: String? {
+        let trimmedName = lensName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsedMinAperture = parseAperture(minApertureText)
+        let parsedMaxAperture = parseAperture(maxApertureText)
+
+        if trimmedName.isEmpty {
+            return "Lens name is required."
+        }
+
+        guard let parsedMinAperture else {
+            return "Widest aperture must be greater than zero."
+        }
+
+        if parsedMinAperture <= 0 {
+            return "Widest aperture must be greater than zero."
+        }
+
+        guard let parsedMaxAperture else {
+            return "Narrowest aperture must be greater than or equal to widest aperture."
+        }
+
+        if parsedMaxAperture < parsedMinAperture {
+            return "Narrowest aperture must be greater than or equal to widest aperture."
+        }
+
+        return nil
+    }
+
+    private func applyLensDraft() {
+        lens.minAperture = parseAperture(minApertureText) ?? lens.minAperture
+        lens.maxAperture = parseAperture(maxApertureText) ?? lens.maxAperture
+
+        let trimmedName = lensName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard trimmedName.isEmpty == false else {
+            lens.brand = ""
+            lens.model = ""
+            lens.focalLengthDescription = nil
+            return
+        }
+
+        let parts = trimmedName.split(whereSeparator: \.isWhitespace)
+        let focalToken = parts.first(where: { $0.localizedCaseInsensitiveContains("mm") })
+
+        lens.focalLengthDescription = focalToken.map(String.init)
+
+        if let focalToken {
+            let focalString = String(focalToken)
+            let remainder = trimmedName.replacingOccurrences(of: focalString, with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            lens.brand = focalString
+            lens.model = remainder.isEmpty ? trimmedName : remainder
+            return
+        }
+
+        if let firstPart = parts.first {
+            lens.brand = String(firstPart)
+            lens.model = parts.dropFirst().joined(separator: " ")
+        } else {
+            lens.brand = ""
+            lens.model = trimmedName
+        }
+    }
+
+    private func parseAperture(_ text: String) -> Double? {
+        Double(text.replacingOccurrences(of: ",", with: "."))
+    }
+
+    private static func apertureText(for value: Double) -> String {
+        let roundedValue = value.rounded()
+        if abs(value - roundedValue) < 0.0001 {
+            return String(Int(roundedValue))
+        }
+
+        return value.formatted(.number.precision(.fractionLength(1)))
     }
 }
 
