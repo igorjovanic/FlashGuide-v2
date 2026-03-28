@@ -32,5 +32,11 @@ enum HomeDestination: String, CaseIterable, Hashable, Identifiable {
 }
 
 final class HomeViewModel: ObservableObject {
-    let destinations = HomeDestination.allCases
+    let destinations: [HomeDestination] = [
+        .liveAssist,
+        .manualCalculator,
+        .gearProfiles,
+        .help,
+        .settings
+    ]
 }

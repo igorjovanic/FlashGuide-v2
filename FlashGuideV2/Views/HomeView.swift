@@ -23,7 +23,7 @@ struct HomeView: View {
                         .padding(.vertical, 4)
                 }
             }
-            .navigationTitle("FlashAssist")
+            .navigationTitle("FlashGude")
             .navigationDestination(for: HomeDestination.self) { destination in
                 switch destination {
                 case .manualCalculator:
