@@ -19,19 +19,16 @@ final class ManualCalculatorViewModel: ObservableObject {
     @Published var recommendation: ExposureRecommendation?
     @Published private(set) var sceneInput: SceneInput
     private let recommendationService: RecommendationServicing
-    private let historyService: RecommendationHistoryServicing
     private let settingsService: SettingsServicing
 
     init(
         recommendationService: RecommendationServicing = RecommendationService(),
-        historyService: RecommendationHistoryServicing = RecommendationHistoryService(),
         settingsService: SettingsServicing = SettingsService(),
         availableCameraBodies: [CameraBody] = [],
         availableLenses: [Lens] = [],
         availableFlashUnits: [FlashUnit] = []
     ) {
         self.recommendationService = recommendationService
-        self.historyService = historyService
         self.settingsService = settingsService
         self.availableCameraBodies = availableCameraBodies
         self.availableLenses = availableLenses
@@ -96,17 +93,6 @@ final class ManualCalculatorViewModel: ObservableObject {
 
         let nextRecommendation = recommendationService.makeRecommendation(for: sceneInput)
         recommendation = nextRecommendation
-        historyService.record(
-            RecommendationHistoryEntry(
-                source: "Manual Calculator",
-                cameraName: "\(cameraBody.brand) \(cameraBody.model)",
-                lensName: "\(lens.brand) \(lens.model)",
-                flashName: "\(flashUnit.brand) \(flashUnit.model)",
-                distanceSource: "Manual entry",
-                ambientPreference: ambientPreference.displayName,
-                recommendation: nextRecommendation
-            )
-        )
     }
 
     var selectedCameraBody: CameraBody? {

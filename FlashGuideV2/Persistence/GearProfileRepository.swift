@@ -6,6 +6,16 @@
 import SwiftData
 
 struct GearProfileRepository {
+    func clearAll(using modelContext: ModelContext, settingsService: SettingsServicing) throws {
+        try modelContext.delete(model: CameraBody.self)
+        try modelContext.delete(model: Lens.self)
+        try modelContext.delete(model: FlashUnit.self)
+        settingsService.defaultCameraBodyID = nil
+        settingsService.defaultLensID = nil
+        settingsService.defaultFlashUnitID = nil
+        try modelContext.save()
+    }
+
     func makeCameraBody() -> CameraBody {
         CameraBody()
     }

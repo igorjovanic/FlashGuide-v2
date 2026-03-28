@@ -38,14 +38,12 @@ final class LiveAssistViewModel: ObservableObject {
 
     private let cameraService: CameraServicing
     private let recommendationService: RecommendationServicing
-    private let historyService: RecommendationHistoryServicing
     private let settingsService: SettingsServicing
     private var cancellables = Set<AnyCancellable>()
 
     init(
         cameraService: CameraServicing,
         recommendationService: RecommendationServicing,
-        historyService: RecommendationHistoryServicing,
         settingsService: SettingsServicing,
         availableCameraBodies: [CameraBody] = [],
         availableLenses: [Lens] = [],
@@ -53,7 +51,6 @@ final class LiveAssistViewModel: ObservableObject {
     ) {
         self.cameraService = cameraService
         self.recommendationService = recommendationService
-        self.historyService = historyService
         self.settingsService = settingsService
         self.availableCameraBodies = availableCameraBodies
         self.availableLenses = availableLenses
@@ -310,17 +307,5 @@ final class LiveAssistViewModel: ObservableObject {
         recommendation = nextRecommendation
 
         guard tapSelection != nil else { return }
-
-        historyService.record(
-            RecommendationHistoryEntry(
-                source: "Live Assist",
-                cameraName: "\(cameraBody.brand) \(cameraBody.model)",
-                lensName: "\(lens.brand) \(lens.model)",
-                flashName: "\(flashUnit.brand) \(flashUnit.model)",
-                distanceSource: distanceSourceLabel,
-                ambientPreference: ambientPreference.displayName,
-                recommendation: nextRecommendation
-            )
-        )
     }
 }

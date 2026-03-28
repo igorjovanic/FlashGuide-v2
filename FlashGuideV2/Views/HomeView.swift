@@ -30,7 +30,6 @@ struct HomeView: View {
                     ManualCalculatorView(
                         viewModel: ManualCalculatorViewModel(
                             recommendationService: dependencies.recommendationService,
-                            historyService: dependencies.historyService,
                             settingsService: dependencies.settingsService
                         )
                     )
@@ -39,7 +38,6 @@ struct HomeView: View {
                         viewModel: LiveAssistViewModel(
                             cameraService: dependencies.cameraService,
                             recommendationService: dependencies.recommendationService,
-                            historyService: dependencies.historyService,
                             settingsService: dependencies.settingsService
                         )
                     )
@@ -49,10 +47,6 @@ struct HomeView: View {
                             repository: dependencies.gearProfileRepository,
                             settingsService: dependencies.settingsService
                         )
-                    )
-                case .history:
-                    HistoryView(
-                        viewModel: HistoryViewModel(historyService: dependencies.historyService)
                     )
                 case .help:
                     HelpView()
