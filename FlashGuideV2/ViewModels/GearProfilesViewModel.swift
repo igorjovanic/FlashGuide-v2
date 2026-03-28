@@ -10,25 +10,22 @@ import SwiftData
 final class GearProfilesViewModel: ObservableObject {
     private let repository: GearProfileRepository
     private let settingsService: SettingsServicing
+    @Published var defaultCameraBodyID: UUID? {
+        didSet { settingsService.defaultCameraBodyID = defaultCameraBodyID }
+    }
+    @Published var defaultLensID: UUID? {
+        didSet { settingsService.defaultLensID = defaultLensID }
+    }
+    @Published var defaultFlashUnitID: UUID? {
+        didSet { settingsService.defaultFlashUnitID = defaultFlashUnitID }
+    }
 
     init(repository: GearProfileRepository, settingsService: SettingsServicing) {
         self.repository = repository
         self.settingsService = settingsService
-    }
-
-    var defaultCameraBodyID: UUID? {
-        get { settingsService.defaultCameraBodyID }
-        set { settingsService.defaultCameraBodyID = newValue }
-    }
-
-    var defaultLensID: UUID? {
-        get { settingsService.defaultLensID }
-        set { settingsService.defaultLensID = newValue }
-    }
-
-    var defaultFlashUnitID: UUID? {
-        get { settingsService.defaultFlashUnitID }
-        set { settingsService.defaultFlashUnitID = newValue }
+        self.defaultCameraBodyID = settingsService.defaultCameraBodyID
+        self.defaultLensID = settingsService.defaultLensID
+        self.defaultFlashUnitID = settingsService.defaultFlashUnitID
     }
 
     func makeCameraBody() -> CameraBody {
