@@ -819,7 +819,7 @@ private struct FlashUnitEditorView: View {
                     .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
 
-                Text("Guide number is stored in meters at ISO 100.")
+                Text("Guide number measures a flash's power, check manufacturer specs for the right number.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 2)
@@ -846,13 +846,6 @@ private struct FlashUnitEditorView: View {
                         .padding(.horizontal, 2)
                 }
 
-                Text("Select the manual power steps supported by this flash unit.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 16)
-                    .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
             .padding(.horizontal, 16)
             .padding(.top, 20)
