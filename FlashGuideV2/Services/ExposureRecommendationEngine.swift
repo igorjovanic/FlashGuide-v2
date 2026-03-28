@@ -38,7 +38,9 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
             cameraBody: cameraBody,
             lens: lens,
             flashUnit: flashUnit,
-            subjectDistanceMeters: effectiveDistance
+            subjectDistanceMeters: effectiveDistance,
+            ambientPreference: sceneInput.ambientPreference,
+            ambientMeterValue: sceneInput.ambientMeterValue
         )
 
         var warnings = flashResult.warnings
@@ -120,7 +122,9 @@ private struct FlashExposureCalculator {
         cameraBody: CameraBody,
         lens: Lens,
         flashUnit: FlashUnit,
-        subjectDistanceMeters: Double
+        subjectDistanceMeters: Double,
+        ambientPreference: AmbientPreference,
+        ambientMeterValue: Double?
     ) -> FlashRecommendation {
         let isoCandidates = ISOCandidateBuilder.makeCandidates(
             minISO: cameraBody.minISO,
@@ -128,6 +132,7 @@ private struct FlashExposureCalculator {
         )
         let powerSteps = PowerStep.parseSupportedSteps(flashUnit.supportedPowerSteps)
         let referenceISO = max(flashUnit.guideNumberISOReference, 1)
+        var validCandidates: [FlashCandidate] = []
 
         for iso in isoCandidates {
             let guideNumberAtISO = flashUnit.guideNumber * sqrt(Double(iso) / Double(referenceISO))
@@ -137,19 +142,46 @@ private struct FlashExposureCalculator {
                 let requiredAperture = effectiveGuideNumber / subjectDistanceMeters
 
                 if requiredAperture >= lens.minAperture && requiredAperture <= lens.maxAperture {
-                    return FlashRecommendation(
-                        aperture: requiredAperture,
-                        iso: iso,
-                        powerStep: powerStep,
-                        warnings: [],
-                        reasoning: [
-                            "Guide number \(ExposureValueFormatter.noDecimal(flashUnit.guideNumber)) at ISO \(referenceISO) was used as the starting flash exposure estimate.",
-                            "ISO \(iso) was selected because it is the lowest ISO that keeps flash exposure within the lens aperture range.",
-                            "Flash power \(powerStep.label) places the required aperture near f/\(ExposureValueFormatter.oneDecimal(requiredAperture)) at \(ExposureValueFormatter.oneDecimal(subjectDistanceMeters))m."
-                        ]
+                    validCandidates.append(
+                        FlashCandidate(
+                            aperture: requiredAperture,
+                            iso: iso,
+                            powerStep: powerStep
+                        )
                     )
                 }
             }
+        }
+
+        if let bestCandidate = bestCandidate(
+            from: validCandidates,
+            cameraBody: cameraBody,
+            lens: lens,
+            ambientPreference: ambientPreference,
+            ambientMeterValue: ambientMeterValue
+        ) {
+            let targetAperture = targetAperture(
+                for: lens,
+                ambientPreference: ambientPreference
+            )
+            let targetISO = targetISO(
+                for: cameraBody,
+                ambientPreference: ambientPreference,
+                ambientMeterValue: ambientMeterValue
+            )
+
+            return FlashRecommendation(
+                aperture: bestCandidate.aperture,
+                iso: bestCandidate.iso,
+                powerStep: bestCandidate.powerStep,
+                warnings: [],
+                reasoning: [
+                    "Guide number \(ExposureValueFormatter.noDecimal(flashUnit.guideNumber)) at ISO \(referenceISO) was used as the starting flash exposure estimate.",
+                    "The engine compared every valid ISO, aperture, and flash power combination instead of pinning ISO to the first legal result.",
+                    "It aimed for about f/\(ExposureValueFormatter.oneDecimal(targetAperture)) and ISO \(ExposureValueFormatter.noDecimal(targetISO)) based on the ambient preference, then chose ISO \(bestCandidate.iso) with flash power \(bestCandidate.powerStep.label).",
+                    "At \(ExposureValueFormatter.oneDecimal(subjectDistanceMeters))m that places the flash exposure near f/\(ExposureValueFormatter.oneDecimal(bestCandidate.aperture))."
+                ]
+            )
         }
 
         let lowestPowerStep = powerSteps.min(by: { $0.fraction < $1.fraction }) ?? .full
@@ -189,6 +221,145 @@ private struct FlashExposureCalculator {
                 "The recommendation is clamped to the widest supported aperture and maximum ISO because the flash is still short of the required exposure."
             ]
         )
+    }
+
+    private func bestCandidate(
+        from candidates: [FlashCandidate],
+        cameraBody: CameraBody,
+        lens: Lens,
+        ambientPreference: AmbientPreference,
+        ambientMeterValue: Double?
+    ) -> FlashCandidate? {
+        guard !candidates.isEmpty else { return nil }
+
+        let targetAperture = targetAperture(for: lens, ambientPreference: ambientPreference)
+        let targetISO = targetISO(
+            for: cameraBody,
+            ambientPreference: ambientPreference,
+            ambientMeterValue: ambientMeterValue
+        )
+
+        return candidates.min {
+            score(
+                candidate: $0,
+                cameraBody: cameraBody,
+                lens: lens,
+                targetAperture: targetAperture,
+                targetISO: targetISO,
+                ambientPreference: ambientPreference
+            ) < score(
+                candidate: $1,
+                cameraBody: cameraBody,
+                lens: lens,
+                targetAperture: targetAperture,
+                targetISO: targetISO,
+                ambientPreference: ambientPreference
+            )
+        }
+    }
+
+    private func score(
+        candidate: FlashCandidate,
+        cameraBody: CameraBody,
+        lens: Lens,
+        targetAperture: Double,
+        targetISO: Double,
+        ambientPreference: AmbientPreference
+    ) -> Double {
+        let aperturePenalty = abs(log2(candidate.aperture / targetAperture)) * 1.8
+        let isoPenalty = abs(log2(Double(candidate.iso) / targetISO)) * 1.25
+        let powerPenalty = normalizedPowerPenalty(for: candidate.powerStep) * powerPenaltyWeight(for: ambientPreference)
+        let apertureEdgePenalty = apertureEdgePenalty(candidate.aperture, lens: lens)
+        let maxISOPenalty = candidate.iso == cameraBody.maxISO ? 0.05 : 0
+
+        return aperturePenalty + isoPenalty + powerPenalty + apertureEdgePenalty + maxISOPenalty
+    }
+
+    private func targetAperture(
+        for lens: Lens,
+        ambientPreference: AmbientPreference
+    ) -> Double {
+        let midpoint = sqrt(lens.minAperture * lens.maxAperture)
+
+        let preferredValue: Double
+        switch ambientPreference {
+        case .darkerBackground:
+            preferredValue = max(midpoint, 5.6)
+        case .balanced:
+            preferredValue = min(max(midpoint, 4.0), 5.6)
+        case .brighterAmbient:
+            preferredValue = min(max(lens.minAperture * 1.4, lens.minAperture), 4.0)
+        case .freezeMotion:
+            preferredValue = min(max(midpoint, 4.0), 8.0)
+        }
+
+        return min(max(preferredValue, lens.minAperture), lens.maxAperture)
+    }
+
+    private func targetISO(
+        for cameraBody: CameraBody,
+        ambientPreference: AmbientPreference,
+        ambientMeterValue: Double?
+    ) -> Double {
+        guard cameraBody.maxISO > cameraBody.minISO else {
+            return Double(cameraBody.minISO)
+        }
+
+        let dynamicRangeStops = log2(Double(cameraBody.maxISO) / Double(cameraBody.minISO))
+        let darknessBias = ambientDarknessBias(from: ambientMeterValue)
+
+        let baseBias: Double
+        let darknessWeight: Double
+
+        switch ambientPreference {
+        case .darkerBackground:
+            baseBias = 0.02
+            darknessWeight = 0.12
+        case .balanced:
+            baseBias = 0.10
+            darknessWeight = 0.28
+        case .brighterAmbient:
+            baseBias = 0.28
+            darknessWeight = 0.42
+        case .freezeMotion:
+            baseBias = 0.06
+            darknessWeight = 0.18
+        }
+
+        let normalizedBias = min(max(baseBias + (darknessBias * darknessWeight), 0), 1)
+        return Double(cameraBody.minISO) * pow(2, dynamicRangeStops * normalizedBias)
+    }
+
+    private func ambientDarknessBias(from ambientMeterValue: Double?) -> Double {
+        guard let ambientMeterValue else { return 0.45 }
+        let normalizedBrightness = min(max((ambientMeterValue - 3) / 9, 0), 1)
+        return 1 - normalizedBrightness
+    }
+
+    private func normalizedPowerPenalty(for powerStep: PowerStep) -> Double {
+        guard powerStep.fraction > 0 else { return 1 }
+        let usageStops = min(max(-log2(powerStep.fraction), 0), 7)
+        return 1 - (usageStops / 7)
+    }
+
+    private func powerPenaltyWeight(for ambientPreference: AmbientPreference) -> Double {
+        switch ambientPreference {
+        case .darkerBackground:
+            0.55
+        case .balanced:
+            0.45
+        case .brighterAmbient:
+            0.30
+        case .freezeMotion:
+            0.60
+        }
+    }
+
+    private func apertureEdgePenalty(_ aperture: Double, lens: Lens) -> Double {
+        guard lens.maxAperture > lens.minAperture else { return 0 }
+        let normalizedPosition = (aperture - lens.minAperture) / (lens.maxAperture - lens.minAperture)
+        let distanceFromCenter = abs(normalizedPosition - 0.5) * 2
+        return distanceFromCenter * 0.18
     }
 }
 
@@ -254,6 +425,12 @@ private struct FlashRecommendation {
     let powerStep: PowerStep
     let warnings: [String]
     let reasoning: [String]
+}
+
+private struct FlashCandidate {
+    let aperture: Double
+    let iso: Int
+    let powerStep: PowerStep
 }
 
 private struct ShutterSpeedValue: Equatable {
