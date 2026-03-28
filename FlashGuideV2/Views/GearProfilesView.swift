@@ -249,41 +249,101 @@ private enum AddGearSheet: String, Identifiable {
 private struct CameraBodyEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var cameraBody: CameraBody
+    @State private var cameraName: String
     @State private var validationMessage: String?
     let title: String
     let isNewRecord: Bool
     let onSave: (CameraBody) throws -> Void
 
+    init(
+        cameraBody: CameraBody,
+        title: String,
+        isNewRecord: Bool,
+        onSave: @escaping (CameraBody) throws -> Void
+    ) {
+        self.cameraBody = cameraBody
+        self.title = title
+        self.isNewRecord = isNewRecord
+        self.onSave = onSave
+        _cameraName = State(initialValue: [cameraBody.brand, cameraBody.model]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+            .joined(separator: " "))
+    }
+
     var body: some View {
-        Form {
-            if let validationMessage {
-                Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Camera")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    TextField("Eg. Sony a7 III", text: $cameraName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Exposure Limits")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    VStack(spacing: 0) {
+                        syncSpeedRow
+                        editorDivider
+                        isoRow(title: "Minimum ISO", value: $cameraBody.minISO)
+                        editorDivider
+                        isoRow(title: "Maximum ISO", value: $cameraBody.maxISO)
+                    }
+                    .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                    Text("Enter the shutter denominator for sync speed, plus the camera's supported ISO range.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 2)
+                }
+
+                if let validationMessage {
                     Text(validationMessage)
                         .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                } else {
+                    Text("Example: enter 200 for a sync speed of 1/200.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                        .background(editorCardColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
             }
-
-            Section("Identity") {
-                TextField("Brand", text: $cameraBody.brand)
-                TextField("Model", text: $cameraBody.model)
-            }
-
-            Section("Exposure Limits") {
-                TextField("Flash Sync Speed", text: $cameraBody.flashSyncSpeed)
-                TextField("Minimum ISO", value: $cameraBody.minISO, format: .number)
-                    .keyboardType(.numberPad)
-                TextField("Maximum ISO", value: $cameraBody.maxISO, format: .number)
-                    .keyboardType(.numberPad)
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 32)
         }
+        .background(Color(.systemBackground))
+        .navigationBarTitleDisplayMode(.large)
         .navigationTitle(title)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Cancel") {
+                    dismiss()
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") {
                     guard validate() else { return }
                     try? onSave(cameraBody)
                     dismiss()
                 }
+                .disabled(isSaveDisabled)
             }
         }
         .onDisappear {
@@ -293,25 +353,73 @@ private struct CameraBodyEditorView: View {
         }
     }
 
+    private var syncSpeedRow: some View {
+        HStack(spacing: 12) {
+            Text("Max Sync Speed")
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Text("1/")
+                .foregroundStyle(.secondary)
+
+            TextField("125", text: syncSpeedDenominatorBinding)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 56)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+    }
+
+    private func isoRow(title: String, value: Binding<Int>) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            TextField(title, value: value, format: .number)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.trailing)
+                .frame(width: 84)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+    }
+
+    private var editorDivider: some View {
+        Divider()
+            .padding(.leading, 18)
+    }
+
+    private var editorCardColor: Color {
+        Color(.secondarySystemBackground)
+    }
+
+    private var syncSpeedDenominatorBinding: Binding<String> {
+        Binding(
+            get: {
+                cameraBody.flashSyncSpeed
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "1/", with: "")
+            },
+            set: { newValue in
+                let digits = newValue.filter(\.isNumber)
+                cameraBody.flashSyncSpeed = digits.isEmpty ? "" : "1/\(digits)"
+            }
+        )
+    }
+
+    private var isSaveDisabled: Bool {
+        currentValidationMessage != nil
+    }
+
     private func validate(silent: Bool = false) -> Bool {
-        let trimmedBrand = cameraBody.brand.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedModel = cameraBody.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSync = cameraBody.flashSyncSpeed.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = currentValidationMessage
 
-        let message: String?
-
-        if trimmedBrand.isEmpty {
-            message = "Brand is required."
-        } else if trimmedModel.isEmpty {
-            message = "Model is required."
-        } else if trimmedSync.isEmpty {
-            message = "Flash sync speed is required."
-        } else if cameraBody.minISO <= 0 {
-            message = "Minimum ISO must be greater than zero."
-        } else if cameraBody.maxISO < cameraBody.minISO {
-            message = "Maximum ISO must be greater than or equal to minimum ISO."
-        } else {
-            message = nil
+        if message == nil {
+            applyCameraName()
         }
 
         if silent == false {
@@ -319,6 +427,43 @@ private struct CameraBodyEditorView: View {
         }
 
         return message == nil
+    }
+
+    private var currentValidationMessage: String? {
+        let trimmedName = cameraName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSync = cameraBody.flashSyncSpeed.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmedName.isEmpty {
+            return "Camera name is required."
+        }
+
+        if trimmedSync.isEmpty {
+            return "Flash sync speed is required."
+        }
+
+        if cameraBody.minISO <= 0 {
+            return "Minimum ISO must be greater than zero."
+        }
+
+        if cameraBody.maxISO < cameraBody.minISO {
+            return "Maximum ISO must be greater than or equal to minimum ISO."
+        }
+
+        return nil
+    }
+
+    private func applyCameraName() {
+        let trimmedName = cameraName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = trimmedName.split(whereSeparator: \.isWhitespace)
+
+        guard let firstPart = parts.first else {
+            cameraBody.brand = ""
+            cameraBody.model = ""
+            return
+        }
+
+        cameraBody.brand = String(firstPart)
+        cameraBody.model = parts.dropFirst().joined(separator: " ")
     }
 }
 

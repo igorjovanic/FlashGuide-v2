@@ -17,7 +17,13 @@ struct GearProfileRepository {
     }
 
     func makeCameraBody() -> CameraBody {
-        CameraBody()
+        CameraBody(
+            brand: "",
+            model: "",
+            flashSyncSpeed: "1/125",
+            minISO: 100,
+            maxISO: 6400
+        )
     }
 
     func makeLens() -> Lens {
