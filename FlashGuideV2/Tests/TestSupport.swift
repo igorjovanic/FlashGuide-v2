@@ -14,6 +14,7 @@ enum TestSupport {
         flashUnit: FlashUnit = FlashUnit.preview,
         subjectDistanceMeters: Double = 2.0,
         ambientPreference: AmbientPreference = .balanced,
+        sceneKindOverride: AmbientSceneKind? = nil,
         ambientMeterValue: Double? = 8.0,
         backgroundAmbientEV: Double? = nil,
         ambientContrastEV: Double? = nil,
@@ -35,6 +36,7 @@ enum TestSupport {
             selectedFlashUnit: flashUnit,
             subjectDistanceMeters: subjectDistanceMeters,
             ambientPreference: ambientPreference,
+            sceneKindOverride: sceneKindOverride,
             selectedTapPoint: nil,
             ambientEstimate: {
                 guard let ambientMeterValue, let resolvedBackgroundEV, let resolvedContrastEV else {

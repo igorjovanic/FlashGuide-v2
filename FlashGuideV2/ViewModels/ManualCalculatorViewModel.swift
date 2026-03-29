@@ -15,6 +15,7 @@ final class ManualCalculatorViewModel: ObservableObject {
     @Published var selectedFlashUnitID: UUID
     @Published var subjectDistanceText: String
     @Published var ambientPreference: AmbientPreference
+    @Published var sceneKindOverride: AmbientSceneKind
     @Published var validationErrors: [String] = []
     @Published var recommendation: ExposureRecommendation?
     @Published private(set) var sceneInput: SceneInput
@@ -43,12 +44,14 @@ final class ManualCalculatorViewModel: ObservableObject {
         self.selectedFlashUnitID = defaultFlashUnit.id
         self.subjectDistanceText = "2.0"
         self.ambientPreference = .balanced
+        self.sceneKindOverride = .indoorLowLight
         self.sceneInput = SceneInput(
             selectedCameraBody: defaultCameraBody,
             selectedLens: defaultLens,
             selectedFlashUnit: defaultFlashUnit,
             subjectDistanceMeters: 2.0,
             ambientPreference: .balanced,
+            sceneKindOverride: .indoorLowLight,
             selectedTapPoint: nil,
             ambientEstimate: nil,
             depthEstimate: nil,
@@ -83,6 +86,7 @@ final class ManualCalculatorViewModel: ObservableObject {
             selectedFlashUnit: flashUnit,
             subjectDistanceMeters: subjectDistance,
             ambientPreference: ambientPreference,
+            sceneKindOverride: sceneKindOverride,
             selectedTapPoint: nil,
             ambientEstimate: nil,
             depthEstimate: nil,

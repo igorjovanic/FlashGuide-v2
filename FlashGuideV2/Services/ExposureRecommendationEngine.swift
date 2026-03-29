@@ -27,12 +27,14 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
         let effectiveDistance = sceneInput.manualDistanceOverride
             ?? sceneInput.depthEstimate
             ?? sceneInput.subjectDistanceMeters
+        let resolvedSceneKind = sceneInput.sceneKindOverride ?? sceneInput.ambientEstimate?.sceneKind
 
         let syncSpeed = ShutterSpeedValue.parse(cameraBody.flashSyncSpeed) ?? .defaultSync
         let shutterResult = shutterCalculator.makeRecommendation(
             syncSpeed: syncSpeed,
             ambientPreference: sceneInput.ambientPreference,
-            ambientEstimate: sceneInput.ambientEstimate
+            ambientEstimate: sceneInput.ambientEstimate,
+            sceneKind: resolvedSceneKind
         )
         let flashResult = flashCalculator.makeRecommendation(
             cameraBody: cameraBody,
@@ -41,7 +43,8 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
             subjectDistanceMeters: effectiveDistance,
             shutterSpeed: shutterResult.shutterSpeed,
             ambientPreference: sceneInput.ambientPreference,
-            ambientEstimate: sceneInput.ambientEstimate
+            ambientEstimate: sceneInput.ambientEstimate,
+            sceneKind: resolvedSceneKind
         )
 
         var warnings = flashResult.warnings
@@ -56,11 +59,15 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
         }
 
         if sceneInput.ambientEstimate == nil {
-            warnings.append("Ambient scene estimate is missing, so ambient handling used preference-based defaults.")
+            if let resolvedSceneKind {
+                reasoning.append("Manual scene type \(resolvedSceneKind.displayName) was used because there is no live ambient estimate in Manual Calculator.")
+            } else {
+                warnings.append("Ambient scene estimate is missing, so ambient handling used preference-based defaults.")
+            }
         } else {
             reasoning.append("Ambient metering used the tapped subject area plus a wider background sample to estimate EV100 and contrast.")
-            if let sceneKind = sceneInput.ambientEstimate?.sceneKind {
-                reasoning.append("The scene was classified as \(sceneKind.displayName), so daylight and night conditions use different ambient targets.")
+            if let resolvedSceneKind {
+                reasoning.append("The scene was classified as \(resolvedSceneKind.displayName), so daylight and night conditions use different ambient targets.")
             }
         }
 
@@ -115,7 +122,8 @@ private struct ShutterRecommendationCalculator {
     func makeRecommendation(
         syncSpeed: ShutterSpeedValue,
         ambientPreference: AmbientPreference,
-        ambientEstimate: AmbientSceneEstimate?
+        ambientEstimate: AmbientSceneEstimate?,
+        sceneKind: AmbientSceneKind?
     ) -> ShutterRecommendation {
         let shutterSpeed: ShutterSpeedValue
         var reasoning = [
@@ -124,7 +132,7 @@ private struct ShutterRecommendationCalculator {
 
         switch ambientPreference {
         case .balanced:
-            switch ambientEstimate?.sceneKind {
+            switch sceneKind {
             case .night:
                 shutterSpeed = syncSpeed.slower(byStops: 1)
                 reasoning.append("Balanced ambient preference slowed the shutter one stop because the scene reads as night.")
@@ -141,7 +149,7 @@ private struct ShutterRecommendationCalculator {
         case .brighterAmbient:
             let backgroundEV = ambientEstimate?.backgroundEV100 ?? ambientEstimate?.subjectEV100
             let slowerStops: Int
-            switch ambientEstimate?.sceneKind {
+            switch sceneKind {
             case .night:
                 slowerStops = 3
             case .indoorLowLight:
@@ -168,7 +176,8 @@ private struct FlashExposureCalculator {
         subjectDistanceMeters: Double,
         shutterSpeed: ShutterSpeedValue,
         ambientPreference: AmbientPreference,
-        ambientEstimate: AmbientSceneEstimate?
+        ambientEstimate: AmbientSceneEstimate?,
+        sceneKind: AmbientSceneKind?
     ) -> FlashRecommendation {
         let isoCandidates = ISOCandidateBuilder.makeCandidates(
             minISO: cameraBody.minISO,
@@ -203,7 +212,8 @@ private struct FlashExposureCalculator {
             lens: lens,
             shutterSpeed: shutterSpeed,
             ambientPreference: ambientPreference,
-            ambientEstimate: ambientEstimate
+            ambientEstimate: ambientEstimate,
+            sceneKind: sceneKind
         ) {
             let targetAperture = targetAperture(
                 for: lens,
@@ -211,7 +221,8 @@ private struct FlashExposureCalculator {
             )
             let ambientProfile = ambientTargetProfile(
                 for: ambientPreference,
-                ambientEstimate: ambientEstimate
+                ambientEstimate: ambientEstimate,
+                sceneKind: sceneKind
             )
 
             return FlashRecommendation(
@@ -274,14 +285,16 @@ private struct FlashExposureCalculator {
         lens: Lens,
         shutterSpeed: ShutterSpeedValue,
         ambientPreference: AmbientPreference,
-        ambientEstimate: AmbientSceneEstimate?
+        ambientEstimate: AmbientSceneEstimate?,
+        sceneKind: AmbientSceneKind?
     ) -> FlashCandidate? {
         guard !candidates.isEmpty else { return nil }
 
         let targetAperture = targetAperture(for: lens, ambientPreference: ambientPreference)
         let ambientProfile = ambientTargetProfile(
             for: ambientPreference,
-            ambientEstimate: ambientEstimate
+            ambientEstimate: ambientEstimate,
+            sceneKind: sceneKind
         )
 
         return candidates.min {
@@ -359,15 +372,16 @@ private struct FlashExposureCalculator {
 
     private func ambientTargetProfile(
         for ambientPreference: AmbientPreference,
-        ambientEstimate: AmbientSceneEstimate?
+        ambientEstimate: AmbientSceneEstimate?,
+        sceneKind: AmbientSceneKind?
     ) -> AmbientTargetProfile {
         let isBacklit = (ambientEstimate?.subjectBackgroundDeltaEV ?? 0) <= -1.0
         let contrast = ambientEstimate?.ambientContrastEV ?? 0
-        let sceneKind = ambientEstimate?.sceneKind ?? .indoorLowLight
+        let resolvedSceneKind = sceneKind ?? ambientEstimate?.sceneKind ?? .indoorLowLight
 
         switch ambientPreference {
         case .darkerBackground:
-            switch sceneKind {
+            switch resolvedSceneKind {
             case .daylight:
                 return AmbientTargetProfile(
                     subjectOffsetEV: isBacklit ? -0.4 : -0.7,
@@ -390,7 +404,7 @@ private struct FlashExposureCalculator {
                 )
             }
         case .balanced:
-            switch sceneKind {
+            switch resolvedSceneKind {
             case .daylight:
                 return AmbientTargetProfile(
                     subjectOffsetEV: isBacklit ? -0.2 : -0.5,
@@ -413,7 +427,7 @@ private struct FlashExposureCalculator {
                 )
             }
         case .brighterAmbient:
-            switch sceneKind {
+            switch resolvedSceneKind {
             case .daylight:
                 return AmbientTargetProfile(
                     subjectOffsetEV: isBacklit ? 0.0 : -0.1,
@@ -436,7 +450,7 @@ private struct FlashExposureCalculator {
                 )
             }
         case .freezeMotion:
-            switch sceneKind {
+            switch resolvedSceneKind {
             case .daylight:
                 return AmbientTargetProfile(
                     subjectOffsetEV: isBacklit ? -0.5 : -0.9,

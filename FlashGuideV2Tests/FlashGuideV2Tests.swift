@@ -355,6 +355,42 @@ struct FlashGuideV2Tests {
     }
 
     @MainActor
+    @Test func manualSceneTypeOverrideAffectsRecommendationWithoutAmbientEstimate() async throws {
+        let engine = DefaultExposureRecommendationEngine()
+        let daylightManualScene = TestSupport.makeSceneInput(
+            subjectDistanceMeters: 3.0,
+            ambientPreference: .balanced,
+            sceneKindOverride: .daylight,
+            ambientMeterValue: nil
+        )
+        let nightManualScene = TestSupport.makeSceneInput(
+            subjectDistanceMeters: 3.0,
+            ambientPreference: .balanced,
+            sceneKindOverride: .night,
+            ambientMeterValue: nil
+        )
+
+        let daylightOutput = engine.makeRecommendation(
+            cameraBody: daylightManualScene.selectedCameraBody,
+            lens: daylightManualScene.selectedLens,
+            flashUnit: daylightManualScene.selectedFlashUnit,
+            sceneInput: daylightManualScene
+        )
+        let nightOutput = engine.makeRecommendation(
+            cameraBody: nightManualScene.selectedCameraBody,
+            lens: nightManualScene.selectedLens,
+            flashUnit: nightManualScene.selectedFlashUnit,
+            sceneInput: nightManualScene
+        )
+
+        let daylightISO = try #require(parsedISO(from: daylightOutput.iso))
+        let nightISO = try #require(parsedISO(from: nightOutput.iso))
+        #expect(nightISO >= daylightISO)
+        #expect(daylightOutput.reasoning.contains(where: { $0.contains("Manual scene type daylight") }))
+        #expect(nightOutput.reasoning.contains(where: { $0.contains("Manual scene type night") }))
+    }
+
+    @MainActor
     @Test func missingDataProducesWarningsAndLowerConfidence() async throws {
         let engine = DefaultExposureRecommendationEngine()
         let sceneInput = TestSupport.makeSceneInput(

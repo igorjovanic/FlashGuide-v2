@@ -34,6 +34,7 @@ struct SceneInput: Equatable, Hashable, Codable {
     var selectedFlashUnit: FlashUnit
     var subjectDistanceMeters: Double
     var ambientPreference: AmbientPreference
+    var sceneKindOverride: AmbientSceneKind?
     var selectedTapPoint: UserTapSelection?
     var ambientEstimate: AmbientSceneEstimate?
     var depthEstimate: Double?
@@ -63,6 +64,7 @@ struct SceneInput: Equatable, Hashable, Codable {
         selectedFlashUnit: .preview,
         subjectDistanceMeters: 2.0,
         ambientPreference: .balanced,
+        sceneKindOverride: nil,
         selectedTapPoint: nil,
         ambientEstimate: nil,
         depthEstimate: nil,
@@ -77,6 +79,7 @@ struct SceneInput: Equatable, Hashable, Codable {
         selectedFlashUnit: .preview,
         subjectDistanceMeters: 2.5,
         ambientPreference: .balanced,
+        sceneKindOverride: nil,
         selectedTapPoint: .preview,
         ambientEstimate: AmbientSceneEstimate(
             subjectEV100: 7.5,
@@ -100,6 +103,7 @@ struct SceneInput: Equatable, Hashable, Codable {
             selectedFlashUnit: FlashUnit.mockData[1],
             subjectDistanceMeters: 4.0,
             ambientPreference: .freezeMotion,
+            sceneKindOverride: nil,
             selectedTapPoint: UserTapSelection.mockData[1],
             ambientEstimate: AmbientSceneEstimate(
                 subjectEV100: 5.5,
