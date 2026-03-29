@@ -59,7 +59,7 @@ struct CameraStateSnapshot: Equatable {
     let depthSupportState: DepthSupportState
     let depthEstimationState: CameraDepthEstimationState
     let latestDepthEstimate: CameraDepthEstimate?
-    let latestAmbientEstimate: Double?
+    let latestAmbientEstimate: AmbientSceneEstimate?
     let isSessionRunning: Bool
     let framePipelineState: CameraFramePipelineState
     let subjectSelectionSupport: CameraSubjectSelectionSupport

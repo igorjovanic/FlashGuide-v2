@@ -32,15 +32,16 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
         let shutterResult = shutterCalculator.makeRecommendation(
             syncSpeed: syncSpeed,
             ambientPreference: sceneInput.ambientPreference,
-            ambientMeterValue: sceneInput.ambientMeterValue
+            ambientEstimate: sceneInput.ambientEstimate
         )
         let flashResult = flashCalculator.makeRecommendation(
             cameraBody: cameraBody,
             lens: lens,
             flashUnit: flashUnit,
             subjectDistanceMeters: effectiveDistance,
+            shutterSpeed: shutterResult.shutterSpeed,
             ambientPreference: sceneInput.ambientPreference,
-            ambientMeterValue: sceneInput.ambientMeterValue
+            ambientEstimate: sceneInput.ambientEstimate
         )
 
         var warnings = flashResult.warnings
@@ -54,12 +55,32 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
             warnings.append("No depth estimate or manual override was available, so subject distance input was used directly.")
         }
 
-        if sceneInput.ambientMeterValue == nil {
-            warnings.append("Ambient meter value is missing, so ambient handling used preference-based defaults.")
+        if sceneInput.ambientEstimate == nil {
+            warnings.append("Ambient scene estimate is missing, so ambient handling used preference-based defaults.")
+        } else {
+            reasoning.append("Ambient metering used the tapped subject area plus a wider background sample to estimate EV100 and contrast.")
         }
 
         if !sceneInput.isDepthAvailable {
             warnings.append("Depth data is unavailable, which reduces confidence in subject distance assumptions.")
+        }
+
+        if let ambientEstimate = sceneInput.ambientEstimate {
+            if ambientEstimate.subjectBackgroundDeltaEV <= -1.0 {
+                warnings.append("The selected subject appears darker than the background, so backlighting may require extra flash compensation.")
+            }
+
+            if ambientEstimate.ambientContrastEV >= 2.2 {
+                warnings.append("Scene contrast is high, which makes the starting recommendation less certain.")
+            }
+
+            if ambientEstimate.subjectHighlightRatio >= 0.20 {
+                warnings.append("Bright highlight detail is already present on the subject, so highlight clipping is possible.")
+            }
+
+            if ambientEstimate.subjectShadowRatio >= 0.55 {
+                warnings.append("The tapped subject area is very dark, which raises noise risk if the recommendation needs more ISO.")
+            }
         }
 
         if sceneInput.ambientPreference == .darkerBackground &&
@@ -68,7 +89,7 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
         }
 
         let confidence = ConfidenceScoreCalculator.makeScore(
-            hasAmbientMeter: sceneInput.ambientMeterValue != nil,
+            ambientEstimate: sceneInput.ambientEstimate,
             hasDepthEstimate: sceneInput.depthEstimate != nil,
             usedManualOverride: sceneInput.manualDistanceOverride != nil,
             isDepthAvailable: sceneInput.isDepthAvailable,
@@ -91,7 +112,7 @@ private struct ShutterRecommendationCalculator {
     func makeRecommendation(
         syncSpeed: ShutterSpeedValue,
         ambientPreference: AmbientPreference,
-        ambientMeterValue: Double?
+        ambientEstimate: AmbientSceneEstimate?
     ) -> ShutterRecommendation {
         let shutterSpeed: ShutterSpeedValue
         var reasoning = [
@@ -106,8 +127,10 @@ private struct ShutterRecommendationCalculator {
             shutterSpeed = syncSpeed
             reasoning.append("Darker background preference stayed at sync speed because the flash sync cap cannot be exceeded.")
         case .brighterAmbient:
-            shutterSpeed = syncSpeed.slower(byStops: ambientMeterValue == nil ? 1 : 2)
-            reasoning.append("Brighter ambient preference slowed the shutter below sync to collect more ambient light.")
+            let backgroundEV = ambientEstimate?.backgroundEV100 ?? ambientEstimate?.subjectEV100
+            let slowerStops = backgroundEV.map { $0 < 4.5 ? 2 : 1 } ?? 1
+            shutterSpeed = syncSpeed.slower(byStops: slowerStops)
+            reasoning.append("Brighter ambient preference slowed the shutter below sync to preserve more of the metered background light.")
         case .freezeMotion:
             shutterSpeed = syncSpeed
             reasoning.append("Freeze motion preference used the fastest flash-safe shutter speed available.")
@@ -123,8 +146,9 @@ private struct FlashExposureCalculator {
         lens: Lens,
         flashUnit: FlashUnit,
         subjectDistanceMeters: Double,
+        shutterSpeed: ShutterSpeedValue,
         ambientPreference: AmbientPreference,
-        ambientMeterValue: Double?
+        ambientEstimate: AmbientSceneEstimate?
     ) -> FlashRecommendation {
         let isoCandidates = ISOCandidateBuilder.makeCandidates(
             minISO: cameraBody.minISO,
@@ -157,17 +181,17 @@ private struct FlashExposureCalculator {
             from: validCandidates,
             cameraBody: cameraBody,
             lens: lens,
+            shutterSpeed: shutterSpeed,
             ambientPreference: ambientPreference,
-            ambientMeterValue: ambientMeterValue
+            ambientEstimate: ambientEstimate
         ) {
             let targetAperture = targetAperture(
                 for: lens,
                 ambientPreference: ambientPreference
             )
-            let targetISO = targetISO(
-                for: cameraBody,
-                ambientPreference: ambientPreference,
-                ambientMeterValue: ambientMeterValue
+            let ambientProfile = ambientTargetProfile(
+                for: ambientPreference,
+                ambientEstimate: ambientEstimate
             )
 
             return FlashRecommendation(
@@ -177,8 +201,9 @@ private struct FlashExposureCalculator {
                 warnings: [],
                 reasoning: [
                     "Guide number \(ExposureValueFormatter.noDecimal(flashUnit.guideNumber)) at ISO \(referenceISO) was used as the starting flash exposure estimate.",
-                    "The engine compared every valid ISO, aperture, and flash power combination instead of pinning ISO to the first legal result.",
-                    "It aimed for about f/\(ExposureValueFormatter.oneDecimal(targetAperture)) and ISO \(ExposureValueFormatter.noDecimal(targetISO)) based on the ambient preference, then chose ISO \(bestCandidate.iso) with flash power \(bestCandidate.powerStep.label).",
+                    "The engine compared every valid ISO, aperture, flash power, and ambient retention combination instead of pinning ISO to the first legal result.",
+                    "It aimed for about f/\(ExposureValueFormatter.oneDecimal(targetAperture)) while holding the subject near \(ambientProfile.subjectOffsetDescription) and the background near \(ambientProfile.backgroundOffsetDescription).",
+                    "That led to ISO \(bestCandidate.iso) with flash power \(bestCandidate.powerStep.label) once flash reach and ambient balance were both considered.",
                     "At \(ExposureValueFormatter.oneDecimal(subjectDistanceMeters))m that places the flash exposure near f/\(ExposureValueFormatter.oneDecimal(bestCandidate.aperture))."
                 ]
             )
@@ -227,16 +252,16 @@ private struct FlashExposureCalculator {
         from candidates: [FlashCandidate],
         cameraBody: CameraBody,
         lens: Lens,
+        shutterSpeed: ShutterSpeedValue,
         ambientPreference: AmbientPreference,
-        ambientMeterValue: Double?
+        ambientEstimate: AmbientSceneEstimate?
     ) -> FlashCandidate? {
         guard !candidates.isEmpty else { return nil }
 
         let targetAperture = targetAperture(for: lens, ambientPreference: ambientPreference)
-        let targetISO = targetISO(
-            for: cameraBody,
-            ambientPreference: ambientPreference,
-            ambientMeterValue: ambientMeterValue
+        let ambientProfile = ambientTargetProfile(
+            for: ambientPreference,
+            ambientEstimate: ambientEstimate
         )
 
         return candidates.min {
@@ -244,16 +269,20 @@ private struct FlashExposureCalculator {
                 candidate: $0,
                 cameraBody: cameraBody,
                 lens: lens,
+                shutterSpeed: shutterSpeed,
                 targetAperture: targetAperture,
-                targetISO: targetISO,
-                ambientPreference: ambientPreference
+                ambientPreference: ambientPreference,
+                ambientEstimate: ambientEstimate,
+                ambientProfile: ambientProfile
             ) < score(
                 candidate: $1,
                 cameraBody: cameraBody,
                 lens: lens,
+                shutterSpeed: shutterSpeed,
                 targetAperture: targetAperture,
-                targetISO: targetISO,
-                ambientPreference: ambientPreference
+                ambientPreference: ambientPreference,
+                ambientEstimate: ambientEstimate,
+                ambientProfile: ambientProfile
             )
         }
     }
@@ -262,17 +291,29 @@ private struct FlashExposureCalculator {
         candidate: FlashCandidate,
         cameraBody: CameraBody,
         lens: Lens,
+        shutterSpeed: ShutterSpeedValue,
         targetAperture: Double,
-        targetISO: Double,
-        ambientPreference: AmbientPreference
+        ambientPreference: AmbientPreference,
+        ambientEstimate: AmbientSceneEstimate?,
+        ambientProfile: AmbientTargetProfile
     ) -> Double {
         let aperturePenalty = abs(log2(candidate.aperture / targetAperture)) * 1.8
-        let isoPenalty = abs(log2(Double(candidate.iso) / targetISO)) * 1.25
         let powerPenalty = normalizedPowerPenalty(for: candidate.powerStep) * powerPenaltyWeight(for: ambientPreference)
         let apertureEdgePenalty = apertureEdgePenalty(candidate.aperture, lens: lens)
-        let maxISOPenalty = candidate.iso == cameraBody.maxISO ? 0.05 : 0
+        let maxISOPenalty = candidate.iso == cameraBody.maxISO ? 0.10 : 0
+        let noisePenalty = noisePenalty(
+            iso: candidate.iso,
+            cameraBody: cameraBody,
+            ambientEstimate: ambientEstimate
+        )
+        let ambientPenalty = ambientRetentionPenalty(
+            candidate: candidate,
+            shutterSpeed: shutterSpeed,
+            ambientEstimate: ambientEstimate,
+            ambientProfile: ambientProfile
+        )
 
-        return aperturePenalty + isoPenalty + powerPenalty + apertureEdgePenalty + maxISOPenalty
+        return aperturePenalty + powerPenalty + apertureEdgePenalty + maxISOPenalty + noisePenalty + ambientPenalty
     }
 
     private func targetAperture(
@@ -296,44 +337,74 @@ private struct FlashExposureCalculator {
         return min(max(preferredValue, lens.minAperture), lens.maxAperture)
     }
 
-    private func targetISO(
-        for cameraBody: CameraBody,
-        ambientPreference: AmbientPreference,
-        ambientMeterValue: Double?
-    ) -> Double {
-        guard cameraBody.maxISO > cameraBody.minISO else {
-            return Double(cameraBody.minISO)
-        }
-
-        let dynamicRangeStops = log2(Double(cameraBody.maxISO) / Double(cameraBody.minISO))
-        let darknessBias = ambientDarknessBias(from: ambientMeterValue)
-
-        let baseBias: Double
-        let darknessWeight: Double
+    private func ambientTargetProfile(
+        for ambientPreference: AmbientPreference,
+        ambientEstimate: AmbientSceneEstimate?
+    ) -> AmbientTargetProfile {
+        let isBacklit = (ambientEstimate?.subjectBackgroundDeltaEV ?? 0) <= -1.0
+        let contrast = ambientEstimate?.ambientContrastEV ?? 0
 
         switch ambientPreference {
         case .darkerBackground:
-            baseBias = 0.02
-            darknessWeight = 0.12
+            return AmbientTargetProfile(
+                subjectOffsetEV: isBacklit ? -0.5 : -0.8,
+                backgroundOffsetEV: contrast > 1.8 ? -2.6 : -2.2
+            )
         case .balanced:
-            baseBias = 0.10
-            darknessWeight = 0.28
+            return AmbientTargetProfile(
+                subjectOffsetEV: isBacklit ? -0.3 : -0.6,
+                backgroundOffsetEV: contrast > 1.8 ? -1.8 : -1.3
+            )
         case .brighterAmbient:
-            baseBias = 0.28
-            darknessWeight = 0.42
+            return AmbientTargetProfile(
+                subjectOffsetEV: isBacklit ? 0.0 : -0.2,
+                backgroundOffsetEV: contrast > 1.8 ? -1.1 : -0.6
+            )
         case .freezeMotion:
-            baseBias = 0.06
-            darknessWeight = 0.18
+            return AmbientTargetProfile(
+                subjectOffsetEV: isBacklit ? -0.6 : -1.0,
+                backgroundOffsetEV: contrast > 1.8 ? -2.2 : -1.7
+            )
         }
-
-        let normalizedBias = min(max(baseBias + (darknessBias * darknessWeight), 0), 1)
-        return Double(cameraBody.minISO) * pow(2, dynamicRangeStops * normalizedBias)
     }
 
-    private func ambientDarknessBias(from ambientMeterValue: Double?) -> Double {
-        guard let ambientMeterValue else { return 0.45 }
-        let normalizedBrightness = min(max((ambientMeterValue - 3) / 9, 0), 1)
-        return 1 - normalizedBrightness
+    private func ambientRetentionPenalty(
+        candidate: FlashCandidate,
+        shutterSpeed: ShutterSpeedValue,
+        ambientEstimate: AmbientSceneEstimate?,
+        ambientProfile: AmbientTargetProfile
+    ) -> Double {
+        guard let ambientEstimate else { return 0.55 }
+
+        let settingsEV100 = log2((candidate.aperture * candidate.aperture) / shutterSpeed.seconds)
+        let settingsEVAtISO = settingsEV100 - log2(Double(candidate.iso) / 100.0)
+        let subjectOffset = ambientEstimate.subjectEV100 - settingsEVAtISO
+        let backgroundOffset = ambientEstimate.backgroundEV100 - settingsEVAtISO
+
+        let subjectPenalty = abs(subjectOffset - ambientProfile.subjectOffsetEV) * 1.25
+        let backgroundPenalty = abs(backgroundOffset - ambientProfile.backgroundOffsetEV) * 0.95
+        let highlightGuardPenalty = ambientEstimate.subjectHighlightRatio > 0.15 && subjectOffset > 0 ? subjectOffset * 0.6 : 0
+
+        return subjectPenalty + backgroundPenalty + max(highlightGuardPenalty, 0)
+    }
+
+    private func noisePenalty(
+        iso: Int,
+        cameraBody: CameraBody,
+        ambientEstimate: AmbientSceneEstimate?
+    ) -> Double {
+        guard cameraBody.maxISO > cameraBody.minISO else { return 0 }
+
+        let normalizedISO = min(
+            max(
+                log2(Double(iso) / Double(cameraBody.minISO))
+                    / log2(Double(cameraBody.maxISO) / Double(cameraBody.minISO)),
+                0
+            ),
+            1
+        )
+        let shadowWeight = ambientEstimate?.subjectShadowRatio ?? 0.20
+        return normalizedISO * shadowWeight * 0.7
     }
 
     private func normalizedPowerPenalty(for powerStep: PowerStep) -> Double {
@@ -365,7 +436,7 @@ private struct FlashExposureCalculator {
 
 private struct ConfidenceScoreCalculator {
     static func makeScore(
-        hasAmbientMeter: Bool,
+        ambientEstimate: AmbientSceneEstimate?,
         hasDepthEstimate: Bool,
         usedManualOverride: Bool,
         isDepthAvailable: Bool,
@@ -373,8 +444,12 @@ private struct ConfidenceScoreCalculator {
     ) -> Double {
         var score = 0.94
 
-        if !hasAmbientMeter {
+        if ambientEstimate == nil {
             score -= 0.16
+        } else if let ambientEstimate {
+            score -= min(max(ambientEstimate.ambientContrastEV - 1.2, 0) * 0.05, 0.16)
+            score -= min(ambientEstimate.subjectHighlightRatio * 0.22, 0.12)
+            score -= min(ambientEstimate.subjectShadowRatio * 0.18, 0.10)
         }
 
         if !hasDepthEstimate && !usedManualOverride {
@@ -431,6 +506,28 @@ private struct FlashCandidate {
     let aperture: Double
     let iso: Int
     let powerStep: PowerStep
+}
+
+private struct AmbientTargetProfile {
+    let subjectOffsetEV: Double
+    let backgroundOffsetEV: Double
+
+    var subjectOffsetDescription: String {
+        offsetDescription(subjectOffsetEV)
+    }
+
+    var backgroundOffsetDescription: String {
+        offsetDescription(backgroundOffsetEV)
+    }
+
+    private func offsetDescription(_ value: Double) -> String {
+        if value == 0 {
+            return "metered ambient"
+        }
+
+        let roundedValue = ExposureValueFormatter.oneDecimal(abs(value))
+        return "\(roundedValue) stop\(abs(value) >= 1.5 ? "s" : "") \(value < 0 ? "under" : "over") ambient"
+    }
 }
 
 private struct ShutterSpeedValue: Equatable {

@@ -64,7 +64,7 @@ protocol CameraServicing: AnyObject {
     var depthSupportState: DepthSupportState { get }
     var depthEstimationState: CameraDepthEstimationState { get }
     var latestDepthEstimate: CameraDepthEstimate? { get }
-    var latestAmbientEstimate: Double? { get }
+    var latestAmbientEstimate: AmbientSceneEstimate? { get }
     var isSessionRunning: Bool { get }
     var framePipelineState: CameraFramePipelineState { get }
     var subjectSelectionSupport: CameraSubjectSelectionSupport { get }
@@ -86,7 +86,7 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
     private(set) var depthSupportState: DepthSupportState = .unknown
     private(set) var depthEstimationState: CameraDepthEstimationState = .unavailable
     private(set) var latestDepthEstimate: CameraDepthEstimate?
-    private(set) var latestAmbientEstimate: Double?
+    private(set) var latestAmbientEstimate: AmbientSceneEstimate?
     private(set) var isSessionRunning = false
     private(set) var framePipelineState = CameraFramePipelineState.inactive
     private(set) var subjectSelectionSupport = CameraSubjectSelectionSupport.unavailable
@@ -362,11 +362,16 @@ final class CameraSessionManager: NSObject, CameraServicing, AVCaptureDepthDataO
         from connection: AVCaptureConnection
     ) {
         guard output === videoOutput, let point = activeAmbientSamplePoint else { return }
-        guard let estimate = CameraAmbientEstimator.estimate(from: sampleBuffer, around: point) else { return }
+        guard let estimate = CameraAmbientEstimator.estimate(
+            from: sampleBuffer,
+            around: point,
+            using: videoDeviceInput?.device
+        ) else { return }
 
         let now = Date()
         let shouldPublish = latestAmbientEstimate == nil
-            || abs((latestAmbientEstimate ?? estimate) - estimate) > 0.12
+            || abs((latestAmbientEstimate?.subjectEV100 ?? estimate.subjectEV100) - estimate.subjectEV100) > 0.18
+            || abs((latestAmbientEstimate?.ambientContrastEV ?? estimate.ambientContrastEV) - estimate.ambientContrastEV) > 0.22
             || now.timeIntervalSince(lastAmbientPublishTimestamp) > 0.35
 
         guard shouldPublish else { return }

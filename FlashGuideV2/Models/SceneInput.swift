@@ -35,11 +35,27 @@ struct SceneInput: Equatable, Hashable, Codable {
     var subjectDistanceMeters: Double
     var ambientPreference: AmbientPreference
     var selectedTapPoint: UserTapSelection?
-    var ambientMeterValue: Double?
+    var ambientEstimate: AmbientSceneEstimate?
     var depthEstimate: Double?
     var manualDistanceOverride: Double?
     var isDepthAvailable: Bool
     var isSubjectSelectionLocked: Bool
+
+    var ambientMeterValue: Double? {
+        ambientEstimate?.subjectEV100
+    }
+
+    var subjectAmbientEV: Double? {
+        ambientEstimate?.subjectEV100
+    }
+
+    var backgroundAmbientEV: Double? {
+        ambientEstimate?.backgroundEV100
+    }
+
+    var ambientContrastEV: Double? {
+        ambientEstimate?.ambientContrastEV
+    }
 
     static let empty = SceneInput(
         selectedCameraBody: .preview,
@@ -48,7 +64,7 @@ struct SceneInput: Equatable, Hashable, Codable {
         subjectDistanceMeters: 2.0,
         ambientPreference: .balanced,
         selectedTapPoint: nil,
-        ambientMeterValue: nil,
+        ambientEstimate: nil,
         depthEstimate: nil,
         manualDistanceOverride: nil,
         isDepthAvailable: false,
@@ -62,7 +78,14 @@ struct SceneInput: Equatable, Hashable, Codable {
         subjectDistanceMeters: 2.5,
         ambientPreference: .balanced,
         selectedTapPoint: .preview,
-        ambientMeterValue: 7.5,
+        ambientEstimate: AmbientSceneEstimate(
+            subjectEV100: 7.5,
+            backgroundEV100: 6.8,
+            ambientContrastEV: 0.7,
+            subjectBackgroundDeltaEV: 0.7,
+            subjectHighlightRatio: 0.05,
+            subjectShadowRatio: 0.10
+        ),
         depthEstimate: 2.4,
         manualDistanceOverride: nil,
         isDepthAvailable: true,
@@ -78,7 +101,14 @@ struct SceneInput: Equatable, Hashable, Codable {
             subjectDistanceMeters: 4.0,
             ambientPreference: .freezeMotion,
             selectedTapPoint: UserTapSelection.mockData[1],
-            ambientMeterValue: 5.5,
+            ambientEstimate: AmbientSceneEstimate(
+                subjectEV100: 5.5,
+                backgroundEV100: 4.2,
+                ambientContrastEV: 1.3,
+                subjectBackgroundDeltaEV: 1.3,
+                subjectHighlightRatio: 0.02,
+                subjectShadowRatio: 0.18
+            ),
             depthEstimate: 4.2,
             manualDistanceOverride: 3.8,
             isDepthAvailable: true,

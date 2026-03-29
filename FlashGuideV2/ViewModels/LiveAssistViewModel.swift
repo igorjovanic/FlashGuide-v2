@@ -21,7 +21,7 @@ final class LiveAssistViewModel: ObservableObject {
     @Published private(set) var depthSupportState: DepthSupportState
     @Published private(set) var depthEstimationState: CameraDepthEstimationState
     @Published private(set) var latestDepthEstimate: CameraDepthEstimate?
-    @Published private(set) var latestAmbientEstimate: Double?
+    @Published private(set) var latestAmbientEstimate: AmbientSceneEstimate?
     @Published private(set) var isSessionRunning: Bool
     @Published private(set) var framePipelineState: CameraFramePipelineState
     @Published private(set) var subjectSelectionSupport: CameraSubjectSelectionSupport
@@ -78,6 +78,7 @@ final class LiveAssistViewModel: ObservableObject {
         sceneInput.selectedLens = defaultLens
         sceneInput.selectedFlashUnit = defaultFlashUnit
         sceneInput.ambientPreference = ambientPreference
+        sceneInput.ambientEstimate = cameraService.latestAmbientEstimate
         self.cameraService.onStateChange = { [weak self] snapshot in
             Task { @MainActor in
                 self?.apply(snapshot: snapshot)
@@ -219,6 +220,7 @@ final class LiveAssistViewModel: ObservableObject {
         framePipelineState = cameraService.framePipelineState
         subjectSelectionSupport = cameraService.subjectSelectionSupport
         sceneInput.isDepthAvailable = depthSupportState == .supported
+        sceneInput.ambientEstimate = cameraService.latestAmbientEstimate
     }
 
     private func apply(snapshot: CameraStateSnapshot) {
@@ -239,7 +241,7 @@ final class LiveAssistViewModel: ObservableObject {
         } else {
             sceneInput.depthEstimate = nil
         }
-        sceneInput.ambientMeterValue = snapshot.latestAmbientEstimate
+        sceneInput.ambientEstimate = snapshot.latestAmbientEstimate
         refreshRecommendation()
     }
 
