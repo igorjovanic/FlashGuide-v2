@@ -300,6 +300,61 @@ struct FlashGuideV2Tests {
     }
 
     @MainActor
+    @Test func daylightAndNightScenesUseDifferentStrategies() async throws {
+        let engine = DefaultExposureRecommendationEngine()
+        let cameraBody = CameraBody(
+            brand: "Canon",
+            model: "EOS R6 Mark II",
+            flashSyncSpeed: "1/200",
+            minISO: 100,
+            maxISO: 6400
+        )
+
+        let daylightScene = TestSupport.makeSceneInput(
+            cameraBody: cameraBody,
+            subjectDistanceMeters: 3.0,
+            ambientPreference: .balanced,
+            ambientMeterValue: 12.2,
+            backgroundAmbientEV: 11.7,
+            ambientContrastEV: 0.5,
+            subjectHighlightRatio: 0.06,
+            subjectShadowRatio: 0.05
+        )
+        let nightScene = TestSupport.makeSceneInput(
+            cameraBody: cameraBody,
+            subjectDistanceMeters: 3.0,
+            ambientPreference: .balanced,
+            ambientMeterValue: 3.8,
+            backgroundAmbientEV: 3.1,
+            ambientContrastEV: 0.7,
+            subjectHighlightRatio: 0.01,
+            subjectShadowRatio: 0.35
+        )
+
+        #expect(daylightScene.ambientEstimate?.sceneKind == .daylight)
+        #expect(nightScene.ambientEstimate?.sceneKind == .night)
+
+        let daylightOutput = engine.makeRecommendation(
+            cameraBody: cameraBody,
+            lens: daylightScene.selectedLens,
+            flashUnit: daylightScene.selectedFlashUnit,
+            sceneInput: daylightScene
+        )
+        let nightOutput = engine.makeRecommendation(
+            cameraBody: cameraBody,
+            lens: nightScene.selectedLens,
+            flashUnit: nightScene.selectedFlashUnit,
+            sceneInput: nightScene
+        )
+
+        let daylightISO = try #require(parsedISO(from: daylightOutput.iso))
+        let nightISO = try #require(parsedISO(from: nightOutput.iso))
+        #expect(nightISO > daylightISO)
+        #expect(daylightOutput.reasoning.contains(where: { $0.contains("daylight") }))
+        #expect(nightOutput.reasoning.contains(where: { $0.contains("night") }))
+    }
+
+    @MainActor
     @Test func missingDataProducesWarningsAndLowerConfidence() async throws {
         let engine = DefaultExposureRecommendationEngine()
         let sceneInput = TestSupport.makeSceneInput(

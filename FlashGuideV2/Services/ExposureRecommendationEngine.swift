@@ -59,6 +59,9 @@ struct DefaultExposureRecommendationEngine: ExposureRecommendationEngine {
             warnings.append("Ambient scene estimate is missing, so ambient handling used preference-based defaults.")
         } else {
             reasoning.append("Ambient metering used the tapped subject area plus a wider background sample to estimate EV100 and contrast.")
+            if let sceneKind = sceneInput.ambientEstimate?.sceneKind {
+                reasoning.append("The scene was classified as \(sceneKind.displayName), so daylight and night conditions use different ambient targets.")
+            }
         }
 
         if !sceneInput.isDepthAvailable {
@@ -121,14 +124,31 @@ private struct ShutterRecommendationCalculator {
 
         switch ambientPreference {
         case .balanced:
-            shutterSpeed = syncSpeed
-            reasoning.append("Balanced ambient preference kept the shutter at sync speed.")
+            switch ambientEstimate?.sceneKind {
+            case .night:
+                shutterSpeed = syncSpeed.slower(byStops: 1)
+                reasoning.append("Balanced ambient preference slowed the shutter one stop because the scene reads as night.")
+            case .indoorLowLight:
+                shutterSpeed = syncSpeed.slower(byStops: 1)
+                reasoning.append("Balanced ambient preference slowed the shutter slightly because the scene reads as indoor low light.")
+            default:
+                shutterSpeed = syncSpeed
+                reasoning.append("Balanced ambient preference kept the shutter at sync speed.")
+            }
         case .darkerBackground:
             shutterSpeed = syncSpeed
             reasoning.append("Darker background preference stayed at sync speed because the flash sync cap cannot be exceeded.")
         case .brighterAmbient:
             let backgroundEV = ambientEstimate?.backgroundEV100 ?? ambientEstimate?.subjectEV100
-            let slowerStops = backgroundEV.map { $0 < 4.5 ? 2 : 1 } ?? 1
+            let slowerStops: Int
+            switch ambientEstimate?.sceneKind {
+            case .night:
+                slowerStops = 3
+            case .indoorLowLight:
+                slowerStops = 2
+            default:
+                slowerStops = backgroundEV.map { $0 < 4.5 ? 2 : 1 } ?? 1
+            }
             shutterSpeed = syncSpeed.slower(byStops: slowerStops)
             reasoning.append("Brighter ambient preference slowed the shutter below sync to preserve more of the metered background light.")
         case .freezeMotion:
@@ -343,28 +363,101 @@ private struct FlashExposureCalculator {
     ) -> AmbientTargetProfile {
         let isBacklit = (ambientEstimate?.subjectBackgroundDeltaEV ?? 0) <= -1.0
         let contrast = ambientEstimate?.ambientContrastEV ?? 0
+        let sceneKind = ambientEstimate?.sceneKind ?? .indoorLowLight
 
         switch ambientPreference {
         case .darkerBackground:
-            return AmbientTargetProfile(
-                subjectOffsetEV: isBacklit ? -0.5 : -0.8,
-                backgroundOffsetEV: contrast > 1.8 ? -2.6 : -2.2
-            )
+            switch sceneKind {
+            case .daylight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.4 : -0.7,
+                    backgroundOffsetEV: contrast > 1.8 ? -2.2 : -1.8
+                )
+            case .goldenHour:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.3 : -0.6,
+                    backgroundOffsetEV: contrast > 1.8 ? -2.0 : -1.6
+                )
+            case .indoorLowLight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.5 : -0.8,
+                    backgroundOffsetEV: contrast > 1.8 ? -2.6 : -2.2
+                )
+            case .night:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.2 : -0.5,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.6 : -1.2
+                )
+            }
         case .balanced:
-            return AmbientTargetProfile(
-                subjectOffsetEV: isBacklit ? -0.3 : -0.6,
-                backgroundOffsetEV: contrast > 1.8 ? -1.8 : -1.3
-            )
+            switch sceneKind {
+            case .daylight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.2 : -0.5,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.2 : -0.9
+                )
+            case .goldenHour:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.1 : -0.4,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.0 : -0.6
+                )
+            case .indoorLowLight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.3 : -0.6,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.8 : -1.3
+                )
+            case .night:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? 0.0 : -0.2,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.0 : -0.6
+                )
+            }
         case .brighterAmbient:
-            return AmbientTargetProfile(
-                subjectOffsetEV: isBacklit ? 0.0 : -0.2,
-                backgroundOffsetEV: contrast > 1.8 ? -1.1 : -0.6
-            )
+            switch sceneKind {
+            case .daylight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? 0.0 : -0.1,
+                    backgroundOffsetEV: contrast > 1.8 ? -0.6 : -0.3
+                )
+            case .goldenHour:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? 0.1 : 0.0,
+                    backgroundOffsetEV: contrast > 1.8 ? -0.5 : -0.2
+                )
+            case .indoorLowLight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? 0.0 : -0.2,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.1 : -0.6
+                )
+            case .night:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? 0.2 : 0.1,
+                    backgroundOffsetEV: contrast > 1.8 ? -0.3 : 0.0
+                )
+            }
         case .freezeMotion:
-            return AmbientTargetProfile(
-                subjectOffsetEV: isBacklit ? -0.6 : -1.0,
-                backgroundOffsetEV: contrast > 1.8 ? -2.2 : -1.7
-            )
+            switch sceneKind {
+            case .daylight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.5 : -0.9,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.8 : -1.4
+                )
+            case .goldenHour:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.4 : -0.8,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.6 : -1.2
+                )
+            case .indoorLowLight:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.6 : -1.0,
+                    backgroundOffsetEV: contrast > 1.8 ? -2.2 : -1.7
+                )
+            case .night:
+                return AmbientTargetProfile(
+                    subjectOffsetEV: isBacklit ? -0.3 : -0.6,
+                    backgroundOffsetEV: contrast > 1.8 ? -1.2 : -0.9
+                )
+            }
         }
     }
 
