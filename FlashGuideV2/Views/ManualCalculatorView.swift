@@ -321,11 +321,16 @@ struct ManualCalculatorView: View {
             sectionTitle("Result")
 
             if let recommendation = viewModel.recommendation {
-                VStack(alignment: .leading, spacing: 14) {
-                    resultMetricRow("Shutter", recommendation.shutterSpeed)
-                    resultMetricRow("Aperture", recommendation.aperture)
-                    resultMetricRow("ISO", recommendation.iso)
-                    resultMetricRow("Flash Power", recommendation.flashPowerStep)
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
+                        resultMetricTile("Shutter", recommendation.shutterSpeed)
+                        resultMetricTile("ISO", recommendation.iso)
+                    }
+
+                    HStack(spacing: 12) {
+                        resultMetricTile("Aperture", recommendation.aperture)
+                        resultMetricTile("Flash Power", recommendation.flashPowerStep)
+                    }
                 }
                 .padding(18)
                 .background(cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -387,14 +392,25 @@ struct ManualCalculatorView: View {
         items.first(where: { $0.id == selection })?.label ?? ""
     }
 
-    private func resultMetricRow(_ title: String, _ value: String) -> some View {
-        HStack {
+    private func resultMetricTile(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
             Text(title)
-                .foregroundStyle(.primary)
-            Spacer()
-            Text(value)
+                .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(
+            Color(.systemBackground),
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
     }
 
     private func sectionTitle(_ title: String) -> some View {
