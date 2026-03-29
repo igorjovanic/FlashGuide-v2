@@ -7,12 +7,16 @@ import SwiftData
 import SwiftUI
 
 struct ManualCalculatorView: View {
-    @Environment(\.colorScheme) private var colorScheme
 
     @Query(sort: \CameraBody.createdAt) private var cameraBodies: [CameraBody]
     @Query(sort: \Lens.createdAt) private var lenses: [Lens]
     @Query(sort: \FlashUnit.createdAt) private var flashUnits: [FlashUnit]
     @StateObject private var viewModel: ManualCalculatorViewModel
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case subjectDistance
+    }
 
     init(viewModel: ManualCalculatorViewModel) {
         _cameraBodies = Query(sort: \CameraBody.createdAt)
@@ -31,8 +35,7 @@ struct ManualCalculatorView: View {
                 )
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        titleSection
+                    VStack(alignment: .leading, spacing: 28) {
                         selectedGearSection
                         sceneSection
 
@@ -52,7 +55,16 @@ struct ManualCalculatorView: View {
             }
         }
         .navigationTitle("Manual Calculator")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+
+                Button("Done") {
+                    focusedField = nil
+                }
+            }
+        }
         .onAppear {
             syncPersistedGear()
         }
@@ -67,21 +79,23 @@ struct ManualCalculatorView: View {
         }
     }
 
-    private var titleSection: some View {
-        Text("New Calculation")
-            .font(.system(size: 28, weight: .bold, design: .rounded))
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.bottom, 4)
-    }
-
     private var selectedGearSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Selected Gear")
 
             VStack(spacing: 0) {
                 pickerRow(
                     title: "Camera",
                     selection: $viewModel.selectedCameraBodyID,
+                    selectedLabel: selectedLabel(
+                        for: viewModel.selectedCameraBodyID,
+                        items: viewModel.availableCameraBodies.map {
+                            SelectionItem(
+                                id: $0.id,
+                                label: "\($0.brand) \($0.model)"
+                            )
+                        }
+                    ),
                     items: viewModel.availableCameraBodies.map {
                         SelectionItem(
                             id: $0.id,
@@ -95,6 +109,15 @@ struct ManualCalculatorView: View {
                 pickerRow(
                     title: "Lens",
                     selection: $viewModel.selectedLensID,
+                    selectedLabel: selectedLabel(
+                        for: viewModel.selectedLensID,
+                        items: viewModel.availableLenses.map {
+                            SelectionItem(
+                                id: $0.id,
+                                label: "\($0.brand) \($0.model)"
+                            )
+                        }
+                    ),
                     items: viewModel.availableLenses.map {
                         SelectionItem(
                             id: $0.id,
@@ -108,6 +131,15 @@ struct ManualCalculatorView: View {
                 pickerRow(
                     title: "Flash",
                     selection: $viewModel.selectedFlashUnitID,
+                    selectedLabel: selectedLabel(
+                        for: viewModel.selectedFlashUnitID,
+                        items: viewModel.availableFlashUnits.map {
+                            SelectionItem(
+                                id: $0.id,
+                                label: "\($0.brand) \($0.model)"
+                            )
+                        }
+                    ),
                     items: viewModel.availableFlashUnits.map {
                         SelectionItem(
                             id: $0.id,
@@ -121,12 +153,12 @@ struct ManualCalculatorView: View {
             Text("Pick one saved camera, lens, and flash profile for this calculation.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 2)
         }
     }
 
     private var sceneSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Scene")
 
             VStack(spacing: 0) {
@@ -137,6 +169,15 @@ struct ManualCalculatorView: View {
                 pickerRow(
                     title: "Scene Type",
                     selection: $viewModel.sceneKindOverride,
+                    selectedLabel: selectedLabel(
+                        for: viewModel.sceneKindOverride,
+                        items: [
+                            SelectionItem(id: AmbientSceneKind.daylight, label: "Daylight"),
+                            SelectionItem(id: AmbientSceneKind.goldenHour, label: "Golden Hour"),
+                            SelectionItem(id: AmbientSceneKind.indoorLowLight, label: "Indoor Low Light"),
+                            SelectionItem(id: AmbientSceneKind.night, label: "Night")
+                        ]
+                    ),
                     items: [
                         SelectionItem(id: AmbientSceneKind.daylight, label: "Daylight"),
                         SelectionItem(id: AmbientSceneKind.goldenHour, label: "Golden Hour"),
@@ -150,6 +191,12 @@ struct ManualCalculatorView: View {
                 pickerRow(
                     title: "Light Balance",
                     selection: $viewModel.ambientPreference,
+                    selectedLabel: selectedLabel(
+                        for: viewModel.ambientPreference,
+                        items: AmbientPreference.allCases.map {
+                            SelectionItem(id: $0, label: $0.displayName)
+                        }
+                    ),
                     items: AmbientPreference.allCases.map {
                         SelectionItem(id: $0, label: $0.displayName)
                     }
@@ -160,7 +207,7 @@ struct ManualCalculatorView: View {
             Text("Enter distance in meters, choose the scene type, and then decide how much ambient light you want to preserve.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 2)
         }
     }
 
@@ -168,20 +215,27 @@ struct ManualCalculatorView: View {
         HStack(spacing: 12) {
             Text("Subject Distance")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(primaryText)
+                .foregroundStyle(.primary)
 
             Spacer()
 
             TextField("Meters", text: $viewModel.subjectDistanceText)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
-                .foregroundStyle(secondaryValueText)
+                .frame(minWidth: 96, alignment: .trailing)
+                .padding(.vertical, 8)
+                .foregroundStyle(.primary)
+                .focused($focusedField, equals: .subjectDistance)
                 .onChange(of: viewModel.subjectDistanceText) { _, newValue in
                     viewModel.sanitizeSubjectDistance(newValue)
                 }
 
             Text("m")
                 .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            focusedField = .subjectDistance
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 16)
@@ -192,28 +246,38 @@ struct ManualCalculatorView: View {
             ForEach(viewModel.validationErrors, id: \.self) { error in
                 Text(error)
                     .font(.footnote)
-                    .foregroundStyle(validationText)
+                    .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                    .background(validationBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .background(cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
         }
     }
 
     private var actionSection: some View {
-        Button {
-            viewModel.generateRecommendation()
-        } label: {
-            Text("Calculate")
-                .font(.system(size: 17, weight: .semibold))
-                .frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                viewModel.generateRecommendation()
+            } label: {
+                Text("Calculate")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .accessibilityLabel("Calculate recommendation")
+
+            Text("Use this as a starting point, then refine after a test frame.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 16)
+                .background(cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.blue)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .accessibilityLabel("Calculate recommendation")
     }
 
     private var resultSection: some View {
@@ -226,34 +290,17 @@ struct ManualCalculatorView: View {
                     resultMetricRow("Aperture", recommendation.aperture)
                     resultMetricRow("ISO", recommendation.iso)
                     resultMetricRow("Flash Power", recommendation.flashPowerStep)
-                    resultMetricRow(
-                        "Confidence",
-                        recommendation.confidenceScore.formatted(.percent.precision(.fractionLength(0)))
-                    )
-
-                    Divider()
-
-                    ForEach(recommendation.reasoning, id: \.self) { item in
-                        Text(item)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    ForEach(recommendation.warnings, id: \.self) { warning in
-                        Text(warning)
-                            .font(.subheadline)
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
                 }
-                .padding(16)
+                .padding(18)
                 .background(cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             } else {
                 Text("Select saved gear, enter a subject distance, choose the scene type and light balance, then tap Calculate.")
-                    .font(.footnote)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .background(cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
         }
     }
@@ -261,74 +308,77 @@ struct ManualCalculatorView: View {
     private func pickerRow<SelectionValue: Hashable>(
         title: String,
         selection: Binding<SelectionValue>,
+        selectedLabel: String,
         items: [SelectionItem<SelectionValue>]
     ) -> some View {
         HStack(spacing: 12) {
             Text(title)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(primaryText)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
 
             Spacer()
 
-            Picker(title, selection: selection) {
+            Menu {
                 ForEach(items) { item in
-                    Text(item.label)
-                        .tag(item.id)
+                    Button(item.label) {
+                        selection.wrappedValue = item.id
+                    }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selectedLabel)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundStyle(.primary)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: 170, alignment: .trailing)
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .tint(secondaryValueText)
+            .buttonStyle(.plain)
+            .tint(.primary)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 18)
         .padding(.vertical, 16)
+    }
+
+    private func selectedLabel<SelectionValue: Hashable>(
+        for selection: SelectionValue,
+        items: [SelectionItem<SelectionValue>]
+    ) -> String {
+        items.first(where: { $0.id == selection })?.label ?? ""
     }
 
     private func resultMetricRow(_ title: String, _ value: String) -> some View {
         HStack {
             Text(title)
-                .foregroundStyle(primaryText)
+                .foregroundStyle(.primary)
             Spacer()
             Text(value)
-                .foregroundStyle(secondaryValueText)
+                .foregroundStyle(.secondary)
         }
-        .font(.system(size: 16, weight: .medium))
     }
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 17, weight: .bold))
+            .font(.headline)
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 2)
     }
 
     private var dividerLine: some View {
         Divider()
-            .padding(.leading, 16)
+            .padding(.leading, 18)
     }
 
     private var screenBackground: Color {
-        colorScheme == .dark ? Color(.systemGroupedBackground) : Color(.systemGroupedBackground)
+        Color(.systemBackground)
     }
 
     private var cardBackground: Color {
         Color(.secondarySystemBackground)
-    }
-
-    private var primaryText: Color {
-        colorScheme == .dark ? .white : .primary
-    }
-
-    private var secondaryValueText: Color {
-        colorScheme == .dark ? Color.white.opacity(0.68) : Color.secondary
-    }
-
-    private var validationBackground: Color {
-        colorScheme == .dark ? Color.red.opacity(0.16) : Color.red.opacity(0.10)
-    }
-
-    private var validationText: Color {
-        colorScheme == .dark ? Color.red.opacity(0.92) : Color.red.opacity(0.85)
     }
 
     private func syncPersistedGear() {
