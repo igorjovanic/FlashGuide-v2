@@ -7,6 +7,9 @@ import Combine
 import Foundation
 
 final class ManualCalculatorViewModel: ObservableObject {
+    static let distanceStep = 0.5
+    static let minimumDistance = 0.5
+
     @Published var availableCameraBodies: [CameraBody]
     @Published var availableLenses: [Lens]
     @Published var availableFlashUnits: [FlashUnit]
@@ -115,6 +118,14 @@ final class ManualCalculatorViewModel: ObservableObject {
         parseDecimal(subjectDistanceText)
     }
 
+    var formattedSubjectDistance: String {
+        guard let subjectDistance = parsedSubjectDistance else {
+            return "Custom"
+        }
+
+        return subjectDistance.formatted(.number.precision(.fractionLength(0...1))) + " m"
+    }
+
     func updateAvailableGear(
         cameraBodies: [CameraBody],
         lenses: [Lens],
@@ -151,6 +162,21 @@ final class ManualCalculatorViewModel: ObservableObject {
             character.isNumber || character == "." || character == ","
         }
         subjectDistanceText = filtered
+    }
+
+    func incrementSubjectDistance() {
+        let currentDistance = parsedSubjectDistance ?? 2.0
+        setSubjectDistance(currentDistance + Self.distanceStep)
+    }
+
+    func decrementSubjectDistance() {
+        let currentDistance = parsedSubjectDistance ?? 2.0
+        setSubjectDistance(max(Self.minimumDistance, currentDistance - Self.distanceStep))
+    }
+
+    func setSubjectDistance(_ value: Double) {
+        let clampedValue = max(Self.minimumDistance, value)
+        subjectDistanceText = clampedValue.formatted(.number.precision(.fractionLength(0...1)))
     }
 
     private func validateInputs() -> [String] {

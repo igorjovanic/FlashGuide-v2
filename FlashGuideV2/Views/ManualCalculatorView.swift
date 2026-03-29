@@ -12,6 +12,7 @@ struct ManualCalculatorView: View {
     @Query(sort: \Lens.createdAt) private var lenses: [Lens]
     @Query(sort: \FlashUnit.createdAt) private var flashUnits: [FlashUnit]
     @StateObject private var viewModel: ManualCalculatorViewModel
+    @State private var isEditingCustomDistance = false
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
@@ -62,6 +63,7 @@ struct ManualCalculatorView: View {
 
                 Button("Done") {
                     focusedField = nil
+                    isEditingCustomDistance = false
                 }
             }
         }
@@ -76,6 +78,11 @@ struct ManualCalculatorView: View {
         }
         .onChange(of: flashUnits) { _, _ in
             syncPersistedGear()
+        }
+        .onChange(of: focusedField) { _, newValue in
+            if newValue != .subjectDistance {
+                isEditingCustomDistance = false
+            }
         }
     }
 
@@ -212,30 +219,59 @@ struct ManualCalculatorView: View {
     }
 
     private var distanceRow: some View {
-        HStack(spacing: 12) {
-            Text("Subject Distance")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Text("Subject Distance")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.primary)
+            }
 
-            Spacer()
-
-            TextField("Meters", text: $viewModel.subjectDistanceText)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(minWidth: 96, alignment: .trailing)
-                .padding(.vertical, 8)
-                .foregroundStyle(.primary)
-                .focused($focusedField, equals: .subjectDistance)
-                .onChange(of: viewModel.subjectDistanceText) { _, newValue in
-                    viewModel.sanitizeSubjectDistance(newValue)
+            HStack(spacing: 12) {
+                distanceStepButton(systemName: "minus") {
+                    isEditingCustomDistance = false
+                    focusedField = nil
+                    viewModel.decrementSubjectDistance()
                 }
 
-            Text("m")
-                .foregroundStyle(.secondary)
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            focusedField = .subjectDistance
+                Group {
+                    if isEditingCustomDistance {
+                        TextField("Meters", text: $viewModel.subjectDistanceText)
+                            .keyboardType(.decimalPad)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .focused($focusedField, equals: .subjectDistance)
+                            .multilineTextAlignment(.center)
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .onChange(of: viewModel.subjectDistanceText) { _, newValue in
+                                viewModel.sanitizeSubjectDistance(newValue)
+                            }
+                    } else {
+                        Text(viewModel.formattedSubjectDistance)
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 16)
+                .background(
+                    Color(.systemBackground),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isEditingCustomDistance = true
+                    focusedField = .subjectDistance
+                }
+
+                distanceStepButton(systemName: "plus") {
+                    isEditingCustomDistance = false
+                    focusedField = nil
+                    viewModel.incrementSubjectDistance()
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 16)
@@ -366,6 +402,20 @@ struct ManualCalculatorView: View {
             .font(.headline)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 2)
+    }
+
+    private func distanceStepButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 48, height: 48)
+                .background(
+                    Color(.systemBackground),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private var dividerLine: some View {
